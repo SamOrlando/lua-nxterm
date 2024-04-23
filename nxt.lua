@@ -13,12 +13,12 @@ local esc_osc = esc .. ']' -- Operating System Command Sequences (ESC])
 local esc_csi = esc .. '[' -- Control Sequence Introducer Commands (ESC[)
 
 -- todo:
--- nxt.strip with multiple levels (color, color 16, 256, etc)
+-- nxterm.strip with multiple levels (color, color 16, 256, etc)
 -- tolower keywords? should we make it safe for idiots?
 -- chaining? sc.red.bold.ul.ul_c91 ?
 
-local nxt = { -- nxterm vtwtf
-	_VERSION	 = 'lua-nxt',
+local nxterm = { -- nxterm vtwtf
+	_VERSION	 = 'lua-nxterm',
 	_DESCRIPTION = 'NXTerminal Handling, Escape Sequences, Curses, colors and stuff...',
 	_COPYRIGHT   = 'Copyright (C) Sam Orlando 2024 - MIT is for sellouts.',
 	-- options
@@ -71,11 +71,11 @@ local nxt = { -- nxterm vtwtf
 	},
 }
 -- aliases
-nxt.clear = nxt.erase
+nxterm.clear = nxterm.erase
 
 
 -- CURSOR Sequences and Functions
-nxt.cursor = {
+nxterm.cursor = {
 	up = function(n) return concat({esc_csi,n or 1,'A'}) end,
 	down = function(n) return concat({esc_csi,n or 1,'B'}) end,
 	forward = function(n) return concat({esc_csi,n or 1,'C'}) end,
@@ -108,20 +108,20 @@ nxt.cursor = {
 		return x and {x,y}
 	end,
 	getlc = function()
-		local pos = nxt.cursor.get()
+		local pos = nxterm.cursor.get()
 		return {pos[2],pos[1]}
 	end,
 }
-nxt.cursor.right = nxt.cursor.forward
-nxt.cursor.left = nxt.cursor.back
+nxterm.cursor.right = nxterm.cursor.forward
+nxterm.cursor.left = nxterm.cursor.back
 
 -- function depended on cursor functions
-nxt.mode.size = function()
-	local pos = nxt.cursor.get()
-	write(nxt.cursor.set(9999,9999))
+nxterm.mode.size = function()
+	local pos = nxterm.cursor.get()
+	write(nxterm.cursor.set(9999,9999))
 	flush()
-	local size = nxt.cursor.get()
-	write(nxt.cursor.set(pos[1],pos[2]))
+	local size = nxterm.cursor.get()
+	write(nxterm.cursor.set(pos[1],pos[2]))
 	flush()
 	return size
 end
@@ -287,7 +287,7 @@ end
 
 -- break string of key words into a single SGR request string; lets not send an sgr seq for each one...
 local function keys_to_sgr(keys)
-	if nxt.strip then return '' end
+	if nxterm.strip then return '' end
 	local tbl,sn,fc = {} -- tbl of, sequence number, first char
 	if keys == true then keys = '' end -- post_keys was set to true for a reset ([0]m)
 	for v in gmatch(keys or '', '[%w#_]+') do
@@ -322,21 +322,21 @@ local function codes_to_escape(...)
 	end
 	return concat(tbl)
 end
-nxt.escape_codes = codes_to_escape
+nxterm.escape_codes = codes_to_escape
 
 local function compile_sgr(keys, str, post_keys)
 	return concat({keys_to_sgr(keys), str or '',post_keys and keys_to_sgr(post_keys) or ''})
 end
 
-function nxt.sgr() -- a generator that will produce nxt seq sgr codes
+function nxterm.sgr() -- a generator that will produce nxterm seq sgr codes
 	return setmetatable({}, {
 		__call = function(self, keys, str, post_keys) return compile_sgr(keys, str, post_keys) end,
 		__index = function(self, key) return rawget(self, key) or keys_to_sgr(key) end
 		})
 end
 
-nxt.color = nxt.sgr() -- lets assign a generator for ease to the nxt table
-nxt.colour = nxt.color
+nxterm.color = nxterm.sgr() -- lets assign a generator for ease to the nxterm table
+nxterm.colour = nxterm.color
 
 local function nxt_format(fstr, ...) -- translate or strip sequences
 	fstr = codes_to_escape(fstr)
@@ -347,9 +347,9 @@ local function nxt_format(fstr, ...) -- translate or strip sequences
 	end
 	return format(fstr, unpack(t))
 end
-nxt.format = nxt_format
-function nxt.writef(fstr, ...) write(nxt_format(fstr, unpack({...}) )) end
-function nxt.printf(fstr, ...) write(nxt_format(fstr, unpack({...}) )); flush() end
-function nxt.print(...) write(codes_to_escape(...) .. '\r\n'); flush() end
+nxterm.format = nxt_format
+function nxterm.writef(fstr, ...) write(nxt_format(fstr, unpack({...}) )) end
+function nxterm.printf(fstr, ...) write(nxt_format(fstr, unpack({...}) )); flush() end
+function nxterm.print(...) write(codes_to_escape(...) .. '\r\n'); flush() end
 
-return nxt
+return nxterm
