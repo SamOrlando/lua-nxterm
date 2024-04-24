@@ -73,7 +73,6 @@ local nxterm = { -- nxterm vtwtf
 -- aliases
 nxterm.clear = nxterm.erase
 
-
 -- CURSOR Sequences and Functions
 nxterm.cursor = {
 	up = function(n) return concat({esc_csi,n or 1,'A'}) end,
@@ -112,24 +111,25 @@ nxterm.cursor = {
 		return {pos[2],pos[1]}
 	end,
 }
-nxterm.cursor.right = nxterm.cursor.forward
-nxterm.cursor.left = nxterm.cursor.back
+local cursor = nxterm.cursor
+cursor.right = cursor.forward
+cursor.left = cursor.back
+cursor.next_line = cursor.nl
+cursor.prev_line = cursor.pl
 
 -- function depended on cursor functions
 nxterm.mode.size = function()
-	local pos = nxterm.cursor.get()
-	write(nxterm.cursor.set(9999,9999))
-	flush()
-	local size = nxterm.cursor.get()
-	write(nxterm.cursor.set(pos[1],pos[2]))
-	flush()
+	local pos = cursor.get()
+	write(cursor.set(9999,9999)); flush()
+	local size = cursor.get()
+	write(cursor.set(pos[1],pos[2])); flush()
 	return size
 end
 
 -- SGR 
 local key_to_sgr = { -- each key name represents an sgr code (Select Graphic Rendition)
   -- reset
-  reset = 0, normal = 0,
+  reset = 0, rf = 0, normal = 0, -- rf reset font
   -- styles
   b = 1, bright = 1, bold = 1, --bright should not be used but legacy
   shadow = "1:2", -- mintty
@@ -335,7 +335,7 @@ function nxterm.sgr() -- a generator that will produce nxterm seq sgr codes
 		})
 end
 
-nxterm.color = nxterm.sgr() -- lets assign a generator for ease to the nxterm table
+nxterm.color = nxterm.sgr() -- lets assign a generator for ease to the nxterm table -- include defaults and some settings in this generator
 nxterm.colour = nxterm.color
 
 local function nxt_format(fstr, ...) -- translate or strip sequences
@@ -349,7 +349,7 @@ local function nxt_format(fstr, ...) -- translate or strip sequences
 end
 nxterm.format = nxt_format
 function nxterm.writef(fstr, ...) write(nxt_format(fstr, unpack({...}) )) end
-function nxterm.printf(fstr, ...) write(nxt_format(fstr, unpack({...}) )); flush() end
+function nxterm.printf(fstr, ...) write(nxt_format(fstr, unpack({...}) ) .. '\r\n'); flush() end
 function nxterm.print(...) write(codes_to_escape(...) .. '\r\n'); flush() end
 
 return nxterm
