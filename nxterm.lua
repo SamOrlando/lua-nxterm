@@ -1,10 +1,10 @@
 -- local vars
-local format, match, sfind, sub = string.format, string.match, string.find, string.sub
-local gmatch, gsub = string.gmatch, string.gsub, string.sub
+local format, match, sfind, sub, rep = string.format, string.match, string.find, string.sub, string.rep
+local gmatch, gsub = string.gmatch, string.gsub
 local insert, concat = table.insert, table.concat
 local unpack = unpack or table.unpack
 local tonumber = tonumber
-local rawget, rawset, getmetatable, setmetatable = rawget, rawset, getmetatable, setmetatable
+local rawget, setmetatable = rawget, setmetatable
 local pairs, ipairs, type = pairs, ipairs, type
 local read, write, flush = io.read, io.write, io.flush
 
@@ -34,7 +34,7 @@ local nxterm = { -- nxterm vtwtf
 		erase = function(n) return concat({esc_csi,n or 2,'K'}) end,
 		insert = function(n) return concat({esc_csi,n or 1,'L'}) end,
 		delete = function(n) return concat({esc_csi,n or 1,'M'}) end,
-	},	
+	},
 	scroll = {
 		up = function(n) return concat({esc_csi,n or 1,'S'}) end,
 		down = function(n) return concat({esc_csi,n or 1,'T'}) end,
@@ -49,7 +49,7 @@ local nxterm = { -- nxterm vtwtf
 		delete = function(n) return concat({esc_csi,n or 1,'P'}) end,
 		erase = function(n) return concat({esc_csi,n or 1,'X'}) end,
 		insert = function(n) return concat({esc_csi,n or 1,'@'}) end,
-		rep = function(n) return concat({esc_csi,n or 1,'b'}) end, -- repeat and not going to bother; this comment was another excessive 
+		rep = function(n) return concat({esc_csi,n or 1,'b'}) end, -- repeat
 	},
 	mode = { -- need to finish dec mode options and where does the fucking ? go?
 		set = function(m, dec) return m and concat({esc_csi,m,'h'}) end,
@@ -97,7 +97,7 @@ nxterm.cursor = {
 		if c == esc_csi then
 			while true do
 				c = read(1)
-				m = m + 1				
+				m = m + 1
 				if c == 'R' then break
 				elseif m > 7 then return end -- no larger than xxx;xxx something went wrong
 				r = r .. c
@@ -126,7 +126,7 @@ nxterm.mode.size = function()
 	return size
 end
 
--- SGR 
+-- SGR
 local key_to_sgr = { -- each key name represents an sgr code (Select Graphic Rendition)
   -- reset
   reset = 0, rf = 0, normal = 0, -- rf reset font
@@ -135,17 +135,18 @@ local key_to_sgr = { -- each key name represents an sgr code (Select Graphic Ren
   shadow = "1:2", -- mintty
   dim = 2, faint = 2,
   italic = 3, i = 3,
-  under = 4, ul = 4,
+  under = 4, ul = 4, underline = 4,
   ul_single = "4:1", ul_double = "4:2", ul_wavy = "4:3", ul_dot = "4:4", ul_dash = "4:5",
-  blink = 5,
-  blink_fast = 6, blink_rapid = 6,
+  blink = 5, blink_slow = 5,
+  blink_fast = 6, blink_rapid = 6, rapid_blink = 6,
   inverse = 7, reverse = 7,
   hide = 8,
   strike = 9,
+  fraktur = 20,
   ul_double = 21, -- overwrites 4:2
   b_off = 22, bright_off = 22, bold_off = 22, shadow_off = 22,
-  italic_off = 23, i_off = 23,
-  under_off = 24, ul_off = 24,
+  italic_off = 23, i_off = 23, fraktur_off = 23,
+  under_off = 24, ul_off = 24, underline_off = 24,
   blink_off = 25,
   proportional = 26,
   inverse_off = 27, reverse_off = 27,
@@ -307,7 +308,7 @@ local function keys_to_sgr(keys)
 			if sn then insert(tbl, sn) end
 		end
 	end
-	
+
 	return concat({esc_csi,concat(tbl,';'),'m'})
 end
 
@@ -351,5 +352,36 @@ nxterm.format = nxt_format
 function nxterm.writef(fstr, ...) write(nxt_format(fstr, unpack({...}) )) end
 function nxterm.printf(fstr, ...) write(nxt_format(fstr, unpack({...}) ) .. '\r\n'); flush() end
 function nxterm.print(...) write(codes_to_escape(...) .. '\r\n'); flush() end
+
+local dct = { -- draw char table
+	{'┌','┐','└','┘','─','│','├','┤','┴','┬'},
+	{'╔','╗','╚','╝','═','║','╠','╣','╩','╦'},
+	{'╒','╕','╘','╛','═','│','╞','╡','╧','╤'},
+	{'╓','╖','╙','╜','─','║','╟','╢','╨','╥'},
+}
+nxterm.draw = {
+	rect = function(w, h, x, y, ss) -- width, height, x, y, style set
+		if w < 2 or h < 2 then return end
+		x, y, ss = x or 1, y or 1, ss or 1
+		local o = concat{ cursor.set(x,y), dct[ss][1], rep(dct[ss][5], w-2),dct[ss][2], cursor.set(x,y+1) } -- top frame
+		for i = 1, h - 2, 1 do o = o .. concat{ dct[ss][6], cursor.forward(w-2), dct[ss][6], cursor.set(x,y+1+i) } end -- hollow lines
+		o = o .. concat{ cursor.set(x,y+h-1), dct[ss][3], rep(dct[ss][5], w-2), dct[ss][4] } -- bottom frame
+		write(o) -- write it
+		flush() -- calculated
+	end,
+	hline = function(w, x, y, ss)
+		if w < 1 then return end
+		x, y, ss = x or 1, y or 1, ss or 1
+		local o = cursor.set(x,y) .. rep(dct[ss][5], w)
+		write(o); flush()
+	end,
+	vline = function(h, x, y, ss)
+		if h < 1 then return end
+		x, y, ss = x or 1, y or 1, ss or 1
+		-- finish me
+		local o = cursor.set(x,y) .. rep(dct[ss][5], h)
+		write(o); flush()
+	end,
+}
 
 return nxterm
