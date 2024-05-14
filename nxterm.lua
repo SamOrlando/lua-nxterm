@@ -27,35 +27,35 @@ local nxterm = { -- nxterm vtwtf
 	-- char map
 	cm = {},
 	-- general module functions
-	title = function(s) return concat({esc_osc,30,';',(s or ''),'\007'}) end,
+	title = function(s) return concat{esc_osc,30,';',(s or ''),'\007'} end,
 	reset = function() return esc .. 'c' end,
-	erase = function(n) return concat({esc_csi,n or 2,'J'}) end,
+	erase = function(n) return concat{esc_csi,n or 2,'J'} end,
 	line = {
-		erase = function(n) return concat({esc_csi,n or 2,'K'}) end,
-		insert = function(n) return concat({esc_csi,n or 1,'L'}) end,
-		delete = function(n) return concat({esc_csi,n or 1,'M'}) end,
+		erase = function(n) return concat{esc_csi,n or 2,'K'} end,
+		insert = function(n) return concat{esc_csi,n or 1,'L'} end,
+		delete = function(n) return concat{esc_csi,n or 1,'M'} end,
 	},
 	scroll = {
-		up = function(n) return concat({esc_csi,n or 1,'S'}) end,
-		down = function(n) return concat({esc_csi,n or 1,'T'}) end,
+		up = function(n) return concat{esc_csi,n or 1,'S'} end,
+		down = function(n) return concat{esc_csi,n or 1,'T'} end,
 	},
 	shift = { -- todo finish
 		right = nil,
 		left = nil,
 	},
-	tab = function(n) return concat({esc_csi,n or 1,'I'}) end,
-	backtab = function(n) return concat({esc_csi,n or 1,'Z'}) end,
+	tab = function(n) return concat{esc_csi,n or 1,'I'} end,
+	backtab = function(n) return concat{esc_csi,n or 1,'Z'} end,
 	char = {
-		delete = function(n) return concat({esc_csi,n or 1,'P'}) end,
-		erase = function(n) return concat({esc_csi,n or 1,'X'}) end,
-		insert = function(n) return concat({esc_csi,n or 1,'@'}) end,
-		rep = function(n) return concat({esc_csi,n or 1,'b'}) end, -- repeat
+		delete = function(n) return concat{esc_csi,n or 1,'P'} end,
+		erase = function(n) return concat{esc_csi,n or 1,'X'} end,
+		insert = function(n) return concat{esc_csi,n or 1,'@'} end,
+		rep = function(n) return concat{esc_csi,n or 1,'b'} end, -- repeat
 	},
 	mode = { -- need to finish dec mode options and where does the fucking ? go?
-		set = function(m, dec) return m and concat({esc_csi,m,'h'}) end,
-		reset = function(m, dec) return m and concat({esc_csi,m,'l'}) end,
-		restore = function(m, dec) return m and concat({esc_csi,m,'r'}) end,
-		save = function(m, dec) return m and concat({esc_csi,m,'s'}) end,
+		set = function(m, dec) return m and concat{esc_csi,m,'h'} end,
+		reset = function(m, dec) return m and concat{esc_csi,m,'l'} end,
+		restore = function(m, dec) return m and concat{esc_csi,m,'r'} end,
+		save = function(m, dec) return m and concat{esc_csi,m,'s'} end,
 		ansi = function() return esc_csi .. '<' end, --vt100
 		gpu = function(s) return esc_csi .. (s and '1' or '2') end, --vt52/100
 	},
@@ -75,21 +75,21 @@ nxterm.clear = nxterm.erase
 
 -- CURSOR Sequences and Functions
 nxterm.cursor = {
-	up = function(n) return concat({esc_csi,n or 1,'A'}) end,
-	down = function(n) return concat({esc_csi,n or 1,'B'}) end,
-	forward = function(n) return concat({esc_csi,n or 1,'C'}) end,
-	back = function(n) return concat({esc_csi,n or 1,'D'}) end,
-	nl = function(n) return concat({esc_csi,n or 1,'E'}) end,
-	pl = function(n) return concat({esc_csi,n or 1,'F'}) end,
-	sety = function(n, absolute) return concat({esc_csi,n or 1,(absolute and '`') or 'a'}) end,
-	setx = function(n, absolute) return concat({esc_csi,n or 1,(absolute and 'd') or 'e'}) end,
-	set = function(x,y) return concat({esc_csi,y or 1,';',x or 1,'H'}) end,
-	setlc = function(l,c) return concat({esc_csi,l or 1,';',c or 1,'H'}) end,
+	up = function(n) return concat{esc_csi,n or 1,'A'} end,
+	down = function(n) return concat{esc_csi,n or 1,'B'} end,
+	forward = function(n) return concat{esc_csi,n or 1,'C'} end,
+	back = function(n) return concat{esc_csi,n or 1,'D'} end,
+	nl = function(n) return concat{esc_csi,n or 1,'E'} end,
+	pl = function(n) return concat{esc_csi,n or 1,'F'} end,
+	sety = function(n, absolute) return concat{esc_csi,n or 1,(absolute and '`') or 'a'} end,
+	setx = function(n, absolute) return concat{esc_csi,n or 1,(absolute and 'd') or 'e'} end,
+	set = function(x,y) return concat{esc_csi,y or 1,';',x or 1,'H'} end,
+	setlc = function(l,c) return concat{esc_csi,l or 1,';',c or 1,'H'} end,
 	save = function() return esc_csi .. 's' end,
 	restore = function() return esc_csi .. 'u' end,
 	hide = function() return esc_csi .. '?25l' end,
 	show = function() return esc_csi .. '?25h' end,
-	style = function(n) return concat({esc_csi,n or 0,'q'}) end,
+	style = function(n) return concat{esc_csi,n or 0,'q'} end,
 	get = function()
 		write(esc_csi .. '6n')
 		flush()
@@ -309,7 +309,7 @@ local function keys_to_sgr(keys)
 		end
 	end
 
-	return concat({esc_csi,concat(tbl,';'),'m'})
+	return concat{esc_csi,concat(tbl,';'),'m'}
 end
 
 local function codes_to_escape(...)
@@ -326,7 +326,7 @@ end
 nxterm.escape_codes = codes_to_escape
 
 local function compile_sgr(keys, str, post_keys)
-	return concat({keys_to_sgr(keys), str or '',post_keys and keys_to_sgr(post_keys) or ''})
+	return concat{keys_to_sgr(keys), str or '', post_keys and keys_to_sgr(post_keys) or ''}
 end
 
 function nxterm.sgr() -- a generator that will produce nxterm seq sgr codes
