@@ -310,13 +310,10 @@ local function keys_to_sgr(keys)
 	return concat{esc_csi,concat(tbl,';'),'m'}
 end
 
-local function codes_to_escape(...)
+local function codes_to_escape(...) -- convert strings with embeded %{} and return string with encodings
 	local tbl = {}
 	for _,v in pairs({...}) do
-		local r = gsub(v, "(%%{(.-)})",
-			function(s) -- if we want to exapnd out of sgr we just need to check another table below and not just one return
-				return keys_to_sgr(s)
-			end)
+		local r = gsub(v, "(%%{(.-)})", keys_to_sgr)
 		if r then insert(tbl, r) end
 	end
 	return concat(tbl)
