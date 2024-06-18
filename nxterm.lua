@@ -1,12 +1,12 @@
 -- local vars
-local format, match, sfind, sub, rep = string.format, string.match, string.find, string.sub, string.rep
-local gmatch, gsub = string.gmatch, string.gsub
-local insert, concat = table.insert, table.concat
-local unpack = unpack or table.unpack
+local read, write, flush = io.read, io.write, io.flush
 local tonumber = tonumber
 local rawget, setmetatable = rawget, setmetatable
 local pairs, ipairs, type = pairs, ipairs, type
-local read, write, flush = io.read, io.write, io.flush
+local unpack = unpack or table.unpack
+local insert, concat = table.insert, table.concat
+local format, match, find, sub = string.format, string.match, string.find, string.sub
+local gmatch, gsub = string.gmatch, string.gsub
 
 local esc = string.char(27) -- all that is holy
 local esc_osc = esc .. ']' -- Operating System Command Sequences (ESC])
@@ -14,8 +14,8 @@ local esc_csi = esc .. '[' -- Control Sequence Introducer Commands (ESC[)
 
 -- todo:
 -- nxterm.strip with multiple levels (color, color 16, 256, etc)
--- tolower keywords? should we make it safe for idiots?
 -- chaining? sc.red.bold.ul.ul_c91 ?
+-- https://github.com/Absolpega/lua-askpass/blob/main/askpass.lua
 
 local nxterm = { -- nxterm vtwtf
 	_VERSION	 = 'lua-nxterm',
@@ -73,8 +73,7 @@ local nxterm = { -- nxterm vtwtf
 -- aliases
 nxterm.clear = nxterm.erase
 
--- CURSOR Sequences and Functions
-nxterm.cursor = {
+nxterm.cursor = { -- CURSOR Sequences and Functions
 	up = function(n) return concat{esc_csi,n or 1,'A'} end,
 	down = function(n) return concat{esc_csi,n or 1,'B'} end,
 	forward = function(n) return concat{esc_csi,n or 1,'C'} end,
@@ -117,8 +116,7 @@ cursor.left = cursor.back
 cursor.next_line = cursor.nl
 cursor.prev_line = cursor.pl
 
--- function depended on cursor functions
-nxterm.mode.size = function()
+nxterm.mode.size = function() -- depends on cursor functions
 	local pos = cursor.get()
 	write(cursor.set(9999,9999)); flush()
 	local size = cursor.get()
@@ -295,13 +293,13 @@ local function keys_to_sgr(keys)
 		fc, sn = sub(v,1,1), key_to_sgr[v] -- sn assignment test if we have a static entry of the key or not
 		if sn then insert(tbl, sn)
 		else -- no static entry lets find what we got
-			if sfind(v, '[cg]%d+$') then
+			if find(v, '[cg]%d+$') then
 				if fc == 'c' or fc == 'g' then sn = key_to_sgr[fc](v)
 				else sn = key_to_sgr[sub(v,1,4)](v) end
-			elseif sfind(v, '#%x%x%x%x%x%x$') then
+			elseif find(v, '#%x%x%x%x%x%x$') then
 				if fc == '#' then sn = key_to_sgr['#'](v)
 				else sn = key_to_sgr[sub(v,1,4)](v) end
-			elseif sfind(v, 'r(%d+)g(%d+)b(%d+)$') then
+			elseif find(v, 'r(%d+)g(%d+)b(%d+)$') then
 				if fc == 'r' then sn = key_to_sgr['r'](v)
 				else sn = key_to_sgr[sub(v,1,4)](v) end
 			end
@@ -339,7 +337,7 @@ end
 nxterm.color = nxterm.sgr() -- lets assign a generator for ease to the nxterm table -- include defaults and some settings in this generator
 nxterm.colour = nxterm.color
 
-local function nxt_format(fstr, ...) -- translate or strip sequences
+local function nxt_format(fstr, ...) -- replacement for string.format to handle %{} codes prior to native format call
 	fstr = codes_to_escape(fstr)
 	local t = {}
 	for i,v in ipairs({...}) do
@@ -352,36 +350,5 @@ nxterm.format = nxt_format
 function nxterm.writef(fstr, ...) write(nxt_format(fstr, unpack({...}) )) end
 function nxterm.printf(fstr, ...) write(nxt_format(fstr, unpack({...}) ) .. '\r\n'); flush() end
 function nxterm.print(...) write(codes_to_escape(...) .. '\r\n'); flush() end
-
-local dct = { -- draw char table
-	{'┌','┐','└','┘','─','│','├','┤','┴','┬'},
-	{'╔','╗','╚','╝','═','║','╠','╣','╩','╦'},
-	{'╒','╕','╘','╛','═','│','╞','╡','╧','╤'},
-	{'╓','╖','╙','╜','─','║','╟','╢','╨','╥'},
-}
-nxterm.draw = {
-	rect = function(w, h, x, y, ss) -- width, height, x, y, style set
-		if w < 2 or h < 2 then return end
-		x, y, ss = x or 1, y or 1, ss or 1
-		local o = concat{ cursor.set(x,y), dct[ss][1], rep(dct[ss][5], w-2),dct[ss][2], cursor.set(x,y+1) } -- top frame
-		for i = 1, h - 2, 1 do o = o .. concat{ dct[ss][6], cursor.forward(w-2), dct[ss][6], cursor.set(x,y+1+i) } end -- hollow lines
-		o = o .. concat{ cursor.set(x,y+h-1), dct[ss][3], rep(dct[ss][5], w-2), dct[ss][4] } -- bottom frame
-		write(o) -- write it
-		flush() -- calculated
-	end,
-	hline = function(w, x, y, ss)
-		if w < 1 then return end
-		x, y, ss = x or 1, y or 1, ss or 1
-		local o = cursor.set(x,y) .. rep(dct[ss][5], w)
-		write(o); flush()
-	end,
-	vline = function(h, x, y, ss)
-		if h < 1 then return end
-		x, y, ss = x or 1, y or 1, ss or 1
-		-- finish me
-		local o = cursor.set(x,y) .. rep(dct[ss][5], h)
-		write(o); flush()
-	end,
-}
 
 return nxterm
