@@ -276,7 +276,6 @@ key_to_sgr["#"] = function(s)
 end
 key_to_sgr["bg_#"] = function(s)
     local r, g, b = hex_to_rgb(s)
-
     return r and format("48;2;%d;%d;%d", r, g, b)
 end
 key_to_sgr["ul_#"] = function(s)
