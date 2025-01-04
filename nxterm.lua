@@ -13,14 +13,15 @@ local esc_osc = esc .. ']' -- Operating System Command Sequences (ESC])
 local esc_csi = esc .. '[' -- Control Sequence Introducer Commands (ESC[)
 
 -- todo:
--- nxterm.strip with multiple levels (color, color 16, 256, etc)
 -- chaining? sc.red.bold.ul.ul_c91 ?
 -- https://github.com/Absolpega/lua-askpass/blob/main/askpass.lua
+-- add link support (OCS '8;;urlBELtextOCS8;;BEL
+-- add image support (OCS '1337;File=inline=1')
 
 local nxterm = { -- nxterm vtwtf
 	_VERSION	 = 'lua-nxterm',
-	_DESCRIPTION = 'NXTerminal Handling, Escape Sequences, Curses, colors and stuff...',
-	_COPYRIGHT   = 'Copyright (C) Sam Orlando 2024 - MIT is for sellouts.',
+	_DESCRIPTION = 'NXTerminal Handling, Escape Sequences, Cursor, colors and stuff...',
+	_COPYRIGHT   = 'Copyright (C) Sam Orlando 2024 - MIT',
 	-- options
 	strip = nil, -- on option and it will strip all esc seq info from strings passed with keys. (see todo)
 	-- constants
@@ -124,7 +125,7 @@ nxterm.mode.size = function() -- depends on cursor functions
 	return size
 end
 
--- SGR
+-- SGR Key Map
 local key_to_sgr = { -- each key name represents an sgr code (Select Graphic Rendition)
   -- reset
   reset = 0, rf = 0, normal = 0, -- rf reset font
@@ -309,7 +310,7 @@ local function keys_to_sgr(keys)
 	return concat{esc_csi,concat(tbl,';'),'m'}
 end
 
-local function codes_to_escape(...) -- convert strings with embeded %{} and return string with encodings
+function nxterm.escape_codes(...) -- convert strings with embeded %{} and return string with encodings
 	local tbl = {}
 	for _,v in pairs({...}) do
 		local r = gsub(v, "(%%{(.-)})", keys_to_sgr)
@@ -317,7 +318,16 @@ local function codes_to_escape(...) -- convert strings with embeded %{} and retu
 	end
 	return concat(tbl)
 end
-nxterm.escape_codes = codes_to_escape
+local codes_to_escape = nxterm.escape_codes
+
+function nxterm.escape_strip(...) -- convert strings with embeded %{} and return string with them removed
+	local tbl = {}
+	for _,v in pairs({...}) do
+		local r = gsub(v, "(%%{(.-)})", '')
+		if r then insert(tbl, r) end
+	end
+	return concat(tbl)
+end
 
 local function compile_sgr(keys, str, post_keys)
 	return concat{keys_to_sgr(keys), str or '', post_keys and keys_to_sgr(post_keys) or ''}
@@ -333,7 +343,7 @@ end
 nxterm.color = nxterm.sgr() -- lets assign a generator for ease to the nxterm table -- include defaults and some settings in this generator
 nxterm.colour = nxterm.color
 
-local function nxt_format(fstr, ...) -- replacement for string.format to handle %{} codes prior to native format call
+function nxterm.format(fstr, ...) -- replacement for string.format to handle %{} codes prior to native format call
 	fstr = codes_to_escape(fstr)
 	local t = {}
 	for i,v in ipairs({...}) do
@@ -342,7 +352,7 @@ local function nxt_format(fstr, ...) -- replacement for string.format to handle 
 	end
 	return format(fstr, unpack(t))
 end
-nxterm.format = nxt_format
+local nxt_format = nxterm.format
 function nxterm.writef(fstr, ...) write(nxt_format(fstr, unpack({...}) )) end
 function nxterm.printf(fstr, ...) write(nxt_format(fstr, unpack({...}) ) .. '\r\n'); flush() end
 function nxterm.print(...) write(codes_to_escape(...) .. '\r\n'); flush() end
