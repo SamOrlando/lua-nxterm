@@ -1,12 +1,12 @@
 -- local vars
 local read, write, flush = io.read, io.write, io.flush
 local tonumber, tostring = tonumber, tostring
-local rawget, setmetatable, getmetatable = rawget, setmetatable, getmetatable
+local rawget, setmetatable = rawget, setmetatable
 local pairs, ipairs, type, select = pairs, ipairs, type, select
 local unpack = unpack or table.unpack
 local insert, concat = table.insert, table.concat
 local format, match, find, sub = string.format, string.match, string.find, string.sub
-local gmatch, gsub, lower = string.gmatch, string.gsub, string.lower
+local gmatch, gsub = string.gmatch, string.gsub
 local char = string.char
 
 local esc = char(27) -- all that is holy
