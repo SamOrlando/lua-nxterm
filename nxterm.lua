@@ -31,12 +31,6 @@ local nxterm = { -- nxterm vtwtf
 		-- OSC 0 is the widely supported "icon name + window title"
 		return concat{esc_osc, '0;', (s or ''), bel}
 	end,
-	-- hyperlink support (OSC 8) - widely supported in modern terminals
-	link = function(url, text)
-		url = url or ''
-		text = text or url
-		return concat{esc_osc, '8;;', url, bel, text, esc_osc, '8;;', bel}
-	end,
 	reset = function() return esc .. 'c' end,
 	erase = function(n) return concat{esc_csi, n or 2, 'J'} end,
 	line = {
@@ -64,29 +58,23 @@ local nxterm = { -- nxterm vtwtf
 	},
 	mode = {
 		-- m = mode number(s), private = true for DEC private modes (the '?')
-		set     = function(m, private)
+		set   = function(m, private)
 			if not m then return end
 			return concat{esc_csi, private and '?' or '', m, 'h'}
 		end,
-		reset   = function(m, private)
+		reset = function(m, private)
 			if not m then return end
 			return concat{esc_csi, private and '?' or '', m, 'l'}
 		end,
-		save    = function(m, private)
-			if not m then return end
-			return concat{esc_csi, private and '?' or '', m, 's'}
-		end,
-		restore = function(m, private)
-			if not m then return end
-			return concat{esc_csi, private and '?' or '', m, 'r'}
-		end,
+		-- Note: final 'r' is scroll region (see scroll.region), not mode restore.
+		-- DEC private mode save/restore is not exposed here to avoid that clash.
 		ansi = function() return esc_csi .. '<' end, -- VT100
 		gpu  = function(s) return esc_csi .. (s and '1' or '2') end, -- VT52/100
-		alt_screen     = function(on) return on and esc_csi..'?1049h' or esc_csi..'?1049l' end,
-		bracketed_paste= function(on) return on and esc_csi..'?2004h' or esc_csi..'?2004l' end,
+		alt_screen      = function(on) return on and esc_csi..'?1049h' or esc_csi..'?1049l' end,
+		bracketed_paste = function(on) return on and esc_csi..'?2004h' or esc_csi..'?2004l' end,
 		sync  = function(on) return on and esc_csi..'?2026h' or esc_csi..'?2026l' end,
 		focus = function(on) return on and esc_csi..'?1004h' or esc_csi..'?1004l' end,
-		wrap  = function(on) return on and esc_csi..'?7h'  or esc_csi..'?7l'  end
+		wrap  = function(on) return on and esc_csi..'?7h'  or esc_csi..'?7l'  end,
 	},
 	tty = {
 		sane = function() os.execute('stty sane 2>/dev/null') end,
@@ -94,9 +82,9 @@ local nxterm = { -- nxterm vtwtf
 		set  = function() end, -- reserved
 		get  = function() end, -- reserved
 	},
-	mouse = { -- SGR mouse reporting
-		on  = function() return esc_csi .. '?1000h' .. esc_csi .. '?1006h' end,
-		off = function() return esc_csi .. '?10001' .. esc_csi .. '?1006l' end,
+	mouse = { -- normal tracking (?1000) + SGR reporting (?1006)
+		on  = function() return esc_csi..'?1000h'..esc_csi..'?1006h' end,
+		off = function() return esc_csi..'?1000l'..esc_csi..'?1006l' end,
 	},
 	cwd = function(path) return concat{esc_osc, '7;file://', path or '', bel} end,
 	progress = function(state, pct)
@@ -108,6 +96,16 @@ local nxterm = { -- nxterm vtwtf
 }
 -- aliases
 nxterm.clear = nxterm.erase
+
+-- hyperlink support (OSC 8) - widely supported in modern terminals
+-- fix to be text(url) output if stripped
+nxterm.link = function(url, text)
+	if nxterm.strip then return text or url or '' end
+	url = url or ''
+	text = text or url
+	return concat{esc_osc, '8;;', url, bel, text, esc_osc, '8;;', bel}
+end
+
 
 nxterm.cursor = { -- CURSOR Sequences and Functions
 	up      = function(n) return concat{esc_csi, n or 1, 'A'} end,
