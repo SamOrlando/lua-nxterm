@@ -33,7 +33,6 @@ local nxterm = { -- nxterm vtwtf
 	end,
 	-- hyperlink support (OSC 8) - widely supported in modern terminals
 	link = function(url, text)
-		if nxterm.strip then return text or '' end
 		url = url or ''
 		text = text or url
 		return concat{esc_osc, '8;;', url, bel, text, esc_osc, '8;;', bel}
@@ -48,6 +47,7 @@ local nxterm = { -- nxterm vtwtf
 	scroll = {
 		up   = function(n) return concat{esc_csi, n or 1, 'S'} end,
 		down = function(n) return concat{esc_csi, n or 1, 'T'} end,
+		region = function(top, bottom) return concat{esc_csi, top or 1, ';', bottom or '', 'r'} end,
 	},
 	-- column shift (DEC / xterm)
 	shift = {
@@ -82,10 +82,11 @@ local nxterm = { -- nxterm vtwtf
 		end,
 		ansi = function() return esc_csi .. '<' end, -- VT100
 		gpu  = function(s) return esc_csi .. (s and '1' or '2') end, -- VT52/100
-		-- convenience helpers for common private modes
 		alt_screen     = function(on) return on and esc_csi..'?1049h' or esc_csi..'?1049l' end,
-		mouse_tracking = function(on) return on and esc_csi..'?1000h'..esc_csi..'?1006h' or esc_csi..'?1000l'..esc_csi..'?1006l' end,
 		bracketed_paste= function(on) return on and esc_csi..'?2004h' or esc_csi..'?2004l' end,
+		sync  = function(on) return on and esc_csi..'?2026h' or esc_csi..'?2026l' end,
+		focus = function(on) return on and esc_csi..'?1004h' or esc_csi..'?1004l' end,
+		wrap  = function(on) return on and esc_csi..'?7h'  or esc_csi..'?7l'  end
 	},
 	tty = {
 		sane = function() os.execute('stty sane 2>/dev/null') end,
@@ -94,9 +95,16 @@ local nxterm = { -- nxterm vtwtf
 		get  = function() end, -- reserved
 	},
 	mouse = { -- SGR mouse reporting
-		on  = function() return esc_csi .. '?1006h' end,
-		off = function() return esc_csi .. '?1006l' end,
+		on  = function() return esc_csi .. '?1000h' .. esc_csi .. '?1006h' end,
+		off = function() return esc_csi .. '?10001' .. esc_csi .. '?1006l' end,
 	},
+	cwd = function(path) return concat{esc_osc, '7;file://', path or '', bel} end,
+	progress = function(state, pct)
+		-- state: 0=hide, 1=normal, 2=error, 3=indeterminate, 4=paused
+		if state == 0 or state == 3 then return concat{esc_osc, '9;4;', state, bel} end
+		return concat{esc_osc, '9;4;', state, ';', pct or 0, bel}
+	end,
+	bell = function() return bel end,
 }
 -- aliases
 nxterm.clear = nxterm.erase
@@ -116,7 +124,9 @@ nxterm.cursor = { -- CURSOR Sequences and Functions
 	-- setlc(line, col) -- standard row;col order
 	setlc = function(l, c) return concat{esc_csi, l or 1, ';', c or 1, 'H'} end,
 	save     = function() return esc_csi .. 's' end,
+	dec_save = function() return esc .. '7' end,
 	restore  = function() return esc_csi .. 'u' end,
+	dec_restore = function() return esc .. '8' end,
 	hide     = function() return esc_csi .. '?25l' end,
 	show     = function() return esc_csi .. '?25h' end,
 	style    = function(n) return concat{esc_csi, n or 0, 'q'} end, -- DECSCUSR
