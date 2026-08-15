@@ -316,9 +316,9 @@ key_to_sgr['ul_#'] = function(s)
 	return r and format('58;2:%d:%d:%d', r, g, b)
 end
 
--- Convert a space/underscore separated list of keys into a single SGR sequence
-local function keys_to_sgr(keys)
-	if nxterm.strip then return '' end
+-- Resolve key tokens to a list of SGR parameter fragments (no CSI wrapper).
+-- e.g. "red bold" → {"31","1"}   "c88" → {"38;5;88"}   "" → {}
+local function keys_to_sgr_params(keys)
 	if keys == true then keys = '' end -- historical: true → reset
 	local tbl = {}
 	for v in gmatch(keys or '', '[%w#_]+') do
@@ -350,20 +350,27 @@ local function keys_to_sgr(keys)
 			if sn then insert(tbl, sn) end
 		end
 	end
-	-- Empty key list still emits ESC[m (equivalent to reset / SGR 0).
-	-- This matches original behaviour and the example.lua expectation for sc'' and %{}.
+	return tbl
+end
+
+-- Convert a space/underscore separated list of keys into a single SGR sequence.
+-- Empty key list still emits ESC[m (equivalent to reset / SGR 0).
+local function keys_to_sgr(keys)
+	if nxterm.strip then return '' end
+	local tbl = keys_to_sgr_params(keys)
 	return concat{esc_csi, concat(tbl, ';'), 'm'}
 end
 
 function nxterm.escape_codes(...)
 	local n = select('#', ...)
-	local tbl = {}
+	local tbl = {keys_to_sgr('reset')}
 	for i = 1, n do
 		local v = select(i, ...)
 		if type(v) == 'string' then
 			insert(tbl, (gsub(v, '%%{(.-)}', keys_to_sgr)))
 		end
 	end
+	insert(tbl, keys_to_sgr('reset'))
 	return concat(tbl)
 end
 local codes_to_escape = nxterm.escape_codes
@@ -390,23 +397,38 @@ end
 
 ---------------------------------------------------------------------------
 -- Fluent / chainable SGR builder
+-- Accumulates raw SGR parameters so chaining emits ONE sequence:
+--   sc.red.bold  →  ESC[31;1m   (not ESC[31mESC[1m)
+--
 --   color.red.bold("hello")          → styled + auto-reset
 --   tostring(color.red.bold)         → just the sequence
 --   color.red.bold .. "text"         → works via __concat
 --   color("red bold") / color'red bold ul'  → classic key form (returns sequence)
 --   color("red bold", "text", true)  → classic wrap form
 ---------------------------------------------------------------------------
-local function make_sgr_mt(accumulated)
-	accumulated = accumulated or ''
+local function make_sgr_mt(params)
+	-- params = semicolon-joined SGR parameter string, e.g. "31;1;4"
+	params = params or ''
+	local function emit()
+		if nxterm.strip then return '' end
+		return concat{esc_csi, params, 'm'}
+	end
 	local mt
 	mt = {
 		__index = function(_, key)
-			local seq = keys_to_sgr(key)
-			return setmetatable({}, make_sgr_mt(accumulated .. seq))
+			local add = keys_to_sgr_params(key)
+			if #add == 0 then
+				return setmetatable({}, make_sgr_mt(params))
+			end
+			local combined = params
+			for i = 1, #add do
+				combined = combined == '' and tostring(add[i]) or (combined .. ';' .. add[i])
+			end
+			return setmetatable({}, make_sgr_mt(combined))
 		end,
 		__call = function(_, a, b, c)
-			if accumulated == '' then
-				-- Base object: always classic form
+			if params == '' then
+				-- Base object: classic form
 				--   sc("red bold")          → sequence only
 				--   sc("red bold", "text")  → sequence + text
 				--   sc("red bold", "text", "reset") → full wrap
@@ -416,14 +438,12 @@ local function make_sgr_mt(accumulated)
 				--   sc.red.bold("text")     → styles + text + reset
 				--   sc.red.bold()           → just the accumulated sequence
 				if a == nil then
-					return accumulated
+					return emit()
 				end
-				return accumulated .. tostring(a) .. keys_to_sgr('reset')
+				return emit() .. tostring(a) .. keys_to_sgr('reset')
 			end
 		end,
-		__tostring = function()
-			return accumulated
-		end,
+		__tostring = emit,
 		__concat = function(a, b)
 			return tostring(a) .. tostring(b)
 		end,
