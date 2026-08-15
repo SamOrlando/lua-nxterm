@@ -1,9 +1,9 @@
 local nxterm = require('nxterm')
 
 local sc = nxterm.color   -- screen colors
-print( sc.red .. 'The color red ' .. sc.bg_blue .. 'now blue background' .. sc['reset bold yellow'] .. '!!!' )
+print( sc.red .. 'The color red ' .. sc.green.bg_blue .. 'now green with blue background' .. sc['reset bold yellow'] .. '!!!' )
 print( sc'red bold ul' .. 'The color red bold and underlined' )
-print( sc['green blink italic'] .. "The color green blinking and italic" )
+print( sc['rf green blink italic'] .. "The color green blinking and italic" )
 print( sc'' .. 'Nice and boring.' )  -- empty will be reset of attributes
 
 print( sc('r200g100b20') .. 'r200g100b20 (Truecolor)' )

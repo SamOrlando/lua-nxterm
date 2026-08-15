@@ -350,7 +350,8 @@ local function keys_to_sgr(keys)
 			if sn then insert(tbl, sn) end
 		end
 	end
-	if #tbl == 0 then return '' end
+	-- Empty key list still emits ESC[m (equivalent to reset / SGR 0).
+	-- This matches original behaviour and the example.lua expectation for sc'' and %{}.
 	return concat{esc_csi, concat(tbl, ';'), 'm'}
 end
 
@@ -392,7 +393,8 @@ end
 --   color.red.bold("hello")          → styled + auto-reset
 --   tostring(color.red.bold)         → just the sequence
 --   color.red.bold .. "text"         → works via __concat
---   color("red bold", "text", true)  → classic form still supported
+--   color("red bold") / color'red bold ul'  → classic key form (returns sequence)
+--   color("red bold", "text", true)  → classic wrap form
 ---------------------------------------------------------------------------
 local function make_sgr_mt(accumulated)
 	accumulated = accumulated or ''
@@ -402,17 +404,22 @@ local function make_sgr_mt(accumulated)
 			local seq = keys_to_sgr(key)
 			return setmetatable({}, make_sgr_mt(accumulated .. seq))
 		end,
-		__call = function(_, keys_or_str, str, post_keys)
-			-- classic: color(keys, str, post_keys)
-			if type(keys_or_str) == 'string' and str ~= nil then
-				return compile_sgr(keys_or_str, str, post_keys)
+		__call = function(_, a, b, c)
+			if accumulated == '' then
+				-- Base object: always classic form
+				--   sc("red bold")          → sequence only
+				--   sc("red bold", "text")  → sequence + text
+				--   sc("red bold", "text", "reset") → full wrap
+				return compile_sgr(a, b, c)
+			else
+				-- Fluent chain already has styles accumulated
+				--   sc.red.bold("text")     → styles + text + reset
+				--   sc.red.bold()           → just the accumulated sequence
+				if a == nil then
+					return accumulated
+				end
+				return accumulated .. tostring(a) .. keys_to_sgr('reset')
 			end
-			-- fluent: color.red.bold("text")
-			local text = keys_or_str
-			if text == nil then
-				return accumulated -- just the codes
-			end
-			return accumulated .. tostring(text) .. keys_to_sgr('reset')
 		end,
 		__tostring = function()
 			return accumulated
