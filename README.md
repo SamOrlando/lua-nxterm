@@ -458,14 +458,6 @@ luarocks test             # via the rockspec
 
 ---
 
-## Related projects
-
-- [lua-jsonreq](https://github.com/SamOrlando/lua-jsonreq) — JSON over HTTP(S) and JSON-RPC 2.0 client helpers
-- [lua-hue-v2](https://github.com/SamOrlando/lua-hue-v2) — Philips Hue CLIP API v2 client
-- [lua-nuid](https://github.com/SamOrlando/lua-nuid) — NATS Unique Identifier (NUID) generator in pure Lua
-
----
-
 ## License
 
 MIT — Copyright (c) 2024–2026 Sam Orlando. See [LICENSE](LICENSE).
