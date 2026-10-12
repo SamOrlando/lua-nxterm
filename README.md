@@ -1,6 +1,11 @@
 # lua-nxterm
 
-**lua-nxterm** is a feature-rich, pure-Lua alternative to [ansicolors](https://github.com/kikito/ansicolors.lua) (LuaRocks `ansicolors`): it speaks the same ansicolors-compatible `%{...}` markup — `nxterm.escape_codes('%{red}hello')` renders the same as `colors('%{red}hello')` — and adds 256-color and truecolor, fluent chaining, cursor and screen control, and modern terminal features (hyperlinks, titles, progress, synchronized output). See [Migrating from ansicolors](#migrating-from-ansicolors) for the few key-name differences.
+**lua-nxterm** is a feature-rich, pure-Lua drop-in replacement for [ansicolors](https://github.com/kikito/ansicolors.lua) (LuaRocks `ansicolors`): change `require('ansicolors')` to `require('nxterm').ansicolors` and existing `colors('%{red}hello')` / `colors.noReset(...)` calls produce the same bytes. On top of that you get 256-color and truecolor, fluent chaining, cursor and screen control, and modern terminal features (hyperlinks, titles, progress, synchronized output).
+
+```lua
+local colors = require('nxterm').ansicolors   -- was: require('ansicolors')
+print(colors('%{bright red}Error:%{reset} something went wrong'))
+```
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Lua](https://img.shields.io/badge/Lua-5.1%2B-blue.svg)](https://www.lua.org/)
@@ -26,7 +31,7 @@ print(nxterm.escape_codes('Status: %{green bold}OK%{}'))
 - **Modern OSC/CSI extras** (hyperlinks, window title, cwd, progress, synchronized output, focus, mouse)
 - **Ergonomic APIs** — fluent chaining, classic key strings, and `%{...}` embedding in format strings
 
-It is designed to be **easy to drop into existing projects**, including as a replacement for simpler color-only libraries such as ansicolors (see below).
+It is designed to be **easy to drop into existing projects**, including as a drop-in replacement for ansicolors (see [Migrating from ansicolors](#migrating-from-ansicolors)).
 
 No ncurses. No C bindings. Just escape sequences that work on xterm-compatible terminals (Linux console, macOS Terminal, iTerm2, Windows Terminal, Kitty, Ghostty, WezTerm, Alacritty, tmux, …).
 
@@ -64,7 +69,7 @@ From source:
 ```sh
 git clone https://github.com/SamOrlando/lua-nxterm.git
 cd lua-nxterm
-luarocks make rockspecs/lua-nxterm-0.2.0-1.rockspec
+luarocks make rockspecs/lua-nxterm-0.3.0-1.rockspec
 ```
 
 Or vendor the single file `nxterm.lua` next to your script:
@@ -154,7 +159,9 @@ print(sc.red.bold('hello'))   -- ESC[31;1mhelloESC[0m
 | Truecolor | `r200g100b20` `bg_r100g200b255` `ul_r0g0b0` |
 | Hex | `#BB0066` `#f0c` `bg_#003366` `ul_#ff0` |
 
-Unknown or out-of-range keys (`c256`, `g24`, `#12345`, `r300g0b0`) are ignored rather than raising errors.
+Unknown or out-of-range keys (`c256`, `g24`, `#12345`, `r300g0b0`) are ignored rather than raising errors (except in `nxterm.ansicolors`, which raises like ansicolors does).
+
+ansicolors aliases are accepted everywhere: `hidden`, `blackbg` … `whitebg` (kikito) and `clear`, `underscore`, `onblack` … `onwhite` (hoelzro).
 
 ### Style keys
 
@@ -184,39 +191,43 @@ nxterm.printf('Task %{cyan}%s%{} → %{green bold}%s', 'build', 'done')
 
 ## Migrating from ansicolors
 
-Two Lua libraries go by this name; nxterm covers the common usage of both.
-
 ### kikito/ansicolors.lua (LuaRocks `ansicolors`)
 
-[ansicolors.lua](https://github.com/kikito/ansicolors.lua) is a callable module that expands `%{...}` markup:
-
-| ansicolors | nxterm | Notes |
-|------------|--------|-------|
-| `colors('%{red}hello')` | `nxterm.escape_codes('%{red}hello')` | same rendering (reset before and after); nxterm merges keys into one sequence (`ESC[1;31m` instead of `ESC[1mESC[31m`) |
-| `colors.noReset('%{red}hello')` | the shim below | no built-in equivalent |
-| keys `red` … `white`, `bright`, `dim`, `underline`, `blink`, `reverse`, `reset` | same names | |
-| `hidden` | `hide` | |
-| `redbg`, `bluebg`, … | `bg_red`, `bg_blue`, … | |
-| unknown key → error | unknown key → ignored | |
-
-Note that `nxterm.color('%{red}x')` is **not** the same call: `nxterm.color(keys)` takes a key list (`'red bold'`) and returns only the escape sequence.
-
-A small shim keeps existing `require('ansicolors')` call sites working (the `hidden` and `*bg` key names still need renaming):
+`nxterm.ansicolors` is a drop-in replacement for [ansicolors.lua](https://github.com/kikito/ansicolors.lua) 1.0.2:
 
 ```lua
--- ansicolors.lua  (shim on top of nxterm)
-local nx = require('nxterm')
-local function expand(s)
-  return (tostring(s or ''):gsub('%%{(.-)}', function(k) return nx.color(k) end))
-end
-return setmetatable({ noReset = expand }, {
-  __call = function(_, s) return nx.escape_codes(tostring(s == nil and '' or s)) end,
-})
+-- Before
+local colors = require('ansicolors')
+-- After
+local colors = require('nxterm').ansicolors
+
+print(colors('%{red}hello'))                 -- ESC[0m ESC[31m hello ESC[0m
+print(colors('%{bright blue redbg}x%{reset} y'))
+print(colors.noReset('%{green}no reset around this'))
+```
+
+It reproduces ansicolors byte for byte (checked on 1,100+ cases by
+`tests/test_ansicolors_compat.lua` against the real module):
+
+- `colors(str)` wraps `str` in `%{reset}` … `%{reset}`, converting non-strings with `tostring` (`nil` → `''`).
+- `colors.noReset(str)` expands markup only; it accepts strings and numbers.
+- one `ESC[<n>m` per key, keys separated by any non-alphanumeric character (`%{bright_red}` = `bright` + `red`).
+- all ansicolors keys: `reset bright dim underline blink reverse hidden`, the 8 colours and `blackbg` … `whitebg`.
+- an unknown key raises `Unknown key: <word>`.
+
+Extras: any nxterm key works inside the markup too (`%{bg_c88}`, `%{#ff8800}`,
+`%{r10g20b30}`, `%{italic}`), and `NO_COLOR` / `nxterm.strip` turn all codes off.
+The rest of nxterm stays lenient (unknown keys are ignored).
+
+To keep the old module name, add a one-line `ansicolors.lua` to your project:
+
+```lua
+return require('nxterm').ansicolors
 ```
 
 ### hoelzro/ansicolors (superseded by lua-term)
 
-[hoelzro/ansicolors](https://github.com/hoelzro/ansicolors) uses property access. `nxterm.color` supports the same forms:
+[hoelzro/ansicolors](https://github.com/hoelzro/ansicolors) uses property access; `nxterm.color` supports the same forms and all of its key names (`clear`, `underscore`, `hidden`, `onred` …):
 
 ```lua
 local colors = require('nxterm').color         -- was: require('ansicolors')
@@ -224,14 +235,13 @@ local colors = require('nxterm').color         -- was: require('ansicolors')
 print(colors.red .. 'hello' .. colors.reset)
 print(colors.red('hello'))                    -- auto-reset after text
 print(colors.red, 'hello', colors.reset)
+print(colors.onblue .. colors.underscore .. 'x' .. colors.clear)
 
 -- nxterm extras
 print(colors.red.bold.ul('hello'))            -- single combined sequence
 print(colors('red bold underline') .. 'hi')
 print(colors['bg_blue white bold'] .. 'banner' .. colors.reset)
 ```
-
-Key names that differ: `clear` → `reset`, `underscore` → `ul` / `underline`, `hidden` → `hide`, `onred` … → `bg_red` …. `colors.red .. colors.bold` works, but `colors.red.bold` emits one sequence.
 
 ---
 
@@ -359,6 +369,7 @@ When stripped:
 ```text
 nxterm
 ├── color / colour / sgr()     fluent + classic SGR
+├── ansicolors                 kikito/ansicolors.lua drop-in (call, noReset)
 ├── escape_codes / escape_strip
 ├── format / writef / printf / print
 ├── title, link, cwd, progress, bell
@@ -428,7 +439,10 @@ io.write(nxterm.mode.alt_screen(false))
 
 ### ansicolors-compatible module shim
 
-See [Migrating from ansicolors](#migrating-from-ansicolors) for a shim that keeps `require('ansicolors')` call sites (kikito's `%{...}` API) working.
+```lua
+-- ansicolors.lua
+return require('nxterm').ansicolors
+```
 
 ---
 
@@ -446,6 +460,7 @@ See [Migrating from ansicolors](#migrating-from-ansicolors) for a shim that keep
 
 - `cursor.get()` may **block** if the terminal does not answer DSR; use `size()` for geometry when possible.
 - Truecolor, underline styles, OSC 8/9;4, and sync mode depend on terminal support (degrade safely on older emulators).
+- `nxterm.ansicolors` always emits codes unless `NO_COLOR` / `nxterm.strip` is set; ansicolors itself disables codes on Windows unless `ANSICON` is set.
 - Windows: works under Windows Terminal / ConPTY with VT processing enabled; `stty`-based size needs a Unix-like environment or the cursor fallback.
 
 ---
@@ -453,9 +468,23 @@ See [Migrating from ansicolors](#migrating-from-ansicolors) for a shim that keep
 ## Tests
 
 ```sh
-lua tests/test.lua        # any of lua5.1 … lua5.4, luajit
-luarocks test             # via the rockspec
+lua tests/test.lua                      # any of lua5.1 … lua5.4, luajit
+lua tests/test_ansicolors_compat.lua    # byte comparison with ansicolors (luarocks install ansicolors)
+luarocks test                           # via the rockspec
 ```
+
+---
+
+## Changes
+
+### 0.3.0
+
+- `nxterm.ansicolors`: drop-in replacement for kikito/ansicolors.lua (call form, `noReset`, strict keys, byte-identical output).
+- Key aliases from both ansicolors libraries: `hidden`, `blackbg` … `whitebg`, `clear`, `underscore`, `onblack` … `onwhite`.
+
+### 0.2.0
+
+- First public release.
 
 ---
 

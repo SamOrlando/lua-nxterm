@@ -21,7 +21,7 @@ local bel = char(7)
 local no_color = os.getenv("NO_COLOR") ~= nil
 
 local nxterm = { -- nxterm vtwtf
-	_VERSION     = 'lua-nxterm 0.2.0',
+	_VERSION     = 'lua-nxterm 0.3.0',
 	_DESCRIPTION = 'NXTerminal Handling, Escape Sequences, Cursor, colors and stuff...',
 	_COPYRIGHT   = 'Copyright (C) Sam Orlando 2024-2026 - MIT',
 	-- options
@@ -222,6 +222,15 @@ local key_to_sgr = {
 	bg_black = 40, bg_red = 41, bg_green = 42, bg_yellow = 43, bg_brown = 43,
 	bg_blue = 44, bg_magenta = 45, bg_cyan = 46, bg_white = 47,
 	bg_default = 49, bg_reset = 49, bg_off = 49,
+	-- ansicolors compatibility aliases
+	-- kikito/ansicolors.lua: hidden, <color>bg
+	hidden = 8,
+	blackbg = 40, redbg = 41, greenbg = 42, yellowbg = 43,
+	bluebg = 44, magentabg = 45, cyanbg = 46, whitebg = 47,
+	-- hoelzro/ansicolors: clear, underscore, on<color>
+	clear = 0, underscore = 4,
+	onblack = 40, onred = 41, ongreen = 42, onyellow = 43,
+	onblue = 44, onmagenta = 45, oncyan = 46, onwhite = 47,
 	-- extended
 	proportional_off = 50,
 	frame = 51, encircle = 52,
@@ -474,6 +483,49 @@ end
 
 nxterm.color  = nxterm.sgr()
 nxterm.colour = nxterm.color
+
+---------------------------------------------------------------------------
+-- ansicolors drop-in (kikito/ansicolors.lua, LuaRocks "ansicolors" 1.0.2)
+--   local colors = require('nxterm').ansicolors
+--   colors('%{red}hello')          → ESC[0m ESC[31m hello ESC[0m
+--   colors.noReset('%{red}hello')  → ESC[31m hello
+-- Byte-for-byte compatible with ansicolors: one ESC[<n>m per key, strict
+-- (unknown keys raise "Unknown key: <word>"). nxterm keys (bg_red, c88,
+-- #ff8800, r1g2b3, ...) are accepted too. Honours nxterm.strip / NO_COLOR.
+---------------------------------------------------------------------------
+local function ac_escape_keys(keys)
+	if nxterm.strip then return '' end
+	local buf = {}
+	for word in gmatch(keys, '[%w#_]+') do
+		local sn = resolve_token(word)
+		if sn ~= nil then
+			buf[#buf + 1] = concat{esc_csi, sn, 'm'}
+		else
+			-- ansicolors splits on non-alphanumerics: bright_red = bright + red
+			for part in gmatch(word, '%w+') do
+				local p = resolve_token(part)
+				if p == nil then error('Unknown key: ' .. part, 0) end
+				buf[#buf + 1] = concat{esc_csi, p, 'm'}
+			end
+		end
+	end
+	return concat(buf)
+end
+
+local function ac_replace_codes(str)
+	local t = type(str)
+	if t ~= 'string' and t ~= 'number' then
+		error("bad argument #1 to 'noReset' (string expected, got " .. (t == 'nil' and 'no value' or t) .. ")", 2)
+	end
+	return (gsub(str, '%%{(.-)}', ac_escape_keys))
+end
+
+nxterm.ansicolors = setmetatable({ noReset = ac_replace_codes }, {
+	__call = function(_, str)
+		str = tostring(str or '')
+		return ac_replace_codes('%{reset}' .. str .. '%{reset}')
+	end,
+})
 
 function nxterm.format(fstr, ...)
 	fstr = codes_to_escape(fstr)

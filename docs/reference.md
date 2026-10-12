@@ -10,7 +10,7 @@ Notation: `CSI` = `ESC [`, `OSC` = `ESC ]`, `BEL` = `\7`.
 
 | Field | Description |
 |-------|-------------|
-| `nxterm._VERSION` | `'lua-nxterm 0.2.0'` |
+| `nxterm._VERSION` | `'lua-nxterm 0.3.0'` |
 | `nxterm.strip` | `true` when `NO_COLOR` is set at load time. When `true`, all SGR output (colour/style) becomes `''` and `link()` returns plain text. May be changed at runtime. |
 
 ## Colours and styles (SGR)
@@ -35,6 +35,25 @@ styles `bold b dim italic i ul underline ul_double ul_wavy ul_dot ul_dash blink 
 fraktur over frame encircle sup sub` and their `*_off` forms; `reset`, `default`, `bg_default`, `ul_default`;
 dynamic `cN` (0–255), `gN` (greyscale 0–23), `rNgNbN` (0–255 each), `#rrggbb` / `#rgb`, each optionally prefixed
 `bg_` (background) or `ul_` (underline colour). Unknown or out-of-range keys are ignored.
+
+Aliases from ansicolors: `hidden` (8), `blackbg` … `whitebg` (40–47), `clear` (0),
+`underscore` (4), `onblack` … `onwhite` (40–47).
+
+### `nxterm.ansicolors`
+
+Drop-in replacement for [kikito/ansicolors.lua](https://github.com/kikito/ansicolors.lua)
+1.0.2 (`local colors = require('nxterm').ansicolors`). Output is byte-identical to ansicolors.
+
+| Usage | Returns |
+|-------|---------|
+| `ansicolors(str)` | `str` (converted with `tostring`; `nil`/`false` → `''`) wrapped in `%{reset}` … `%{reset}` with markup expanded |
+| `ansicolors.noReset(str)` | `str` (string or number) with markup expanded, no resets; other types raise an error |
+
+Markup `%{keys}`: each key becomes its own `CSI n m`. Keys are split on any
+non-alphanumeric character unless the whole token is an nxterm key (`bg_red`,
+`c88`, `#ff8800`, …), so `%{bright_red}` = `bright` + `red`. An unknown key raises
+`Unknown key: <word>` (only here; the rest of nxterm ignores unknown keys).
+`%{}` expands to nothing. Respects `nxterm.strip`.
 
 ### `nxterm.sgr()`
 Returns the base builder (same object as `nxterm.color`).

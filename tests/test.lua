@@ -23,7 +23,7 @@ end
 local sc = nxterm.color
 
 -- metadata
-eq('version', nxterm._VERSION, 'lua-nxterm 0.2.0')
+eq('version', nxterm._VERSION, 'lua-nxterm 0.3.0')
 eq('colour alias', nxterm.colour, sc)
 eq('clear alias', nxterm.clear, nxterm.erase)
 
@@ -143,6 +143,49 @@ eq('link', nxterm.link('https://e.x', 'e'), OSC .. '8;;https://e.x' .. BEL .. 'e
 eq('progress', nxterm.progress(1, 40), OSC .. '9;4;1;40' .. BEL)
 eq('progress hide', nxterm.progress(0), OSC .. '9;4;0' .. BEL)
 eq('bell', nxterm.bell(), BEL)
+
+
+-- ansicolors compatibility (expected bytes taken from kikito/ansicolors.lua 1.0.2)
+do
+	local ac = nxterm.ansicolors
+	eq('ac call', ac('%{red}hello'), CSI .. '0m' .. CSI .. '31mhello' .. CSI .. '0m')
+	eq('ac one seq per key', ac('%{bright red}x'), CSI .. '0m' .. CSI .. '1m' .. CSI .. '31mx' .. CSI .. '0m')
+	eq('ac underscore split', ac('%{bright_red}x'), CSI .. '0m' .. CSI .. '1m' .. CSI .. '31mx' .. CSI .. '0m')
+	eq('ac comma list', ac('%{red,bright}x'), CSI .. '0m' .. CSI .. '31m' .. CSI .. '1mx' .. CSI .. '0m')
+	eq('ac empty braces', ac('%{}x'), CSI .. '0mx' .. CSI .. '0m')
+	eq('ac plain', ac('plain'), CSI .. '0mplain' .. CSI .. '0m')
+	eq('ac nil', ac(nil), CSI .. '0m' .. CSI .. '0m')
+	eq('ac number', ac(42), CSI .. '0m42' .. CSI .. '0m')
+	eq('ac boolean', ac(true), CSI .. '0mtrue' .. CSI .. '0m')
+	eq('ac tostring obj', ac(setmetatable({}, { __tostring = function() return '%{blue}o' end })),
+		CSI .. '0m' .. CSI .. '34mo' .. CSI .. '0m')
+	eq('ac hidden + bg', ac('%{hidden redbg whitebg}x'), CSI .. '0m' .. CSI .. '8m' .. CSI .. '41m' .. CSI .. '47mx' .. CSI .. '0m')
+	eq('ac noReset', ac.noReset('%{red}hello'), CSI .. '31mhello')
+	eq('ac noReset plain', ac.noReset('plain'), 'plain')
+	eq('ac noReset empty braces', ac.noReset('%{}'), '')
+	eq('ac noReset number', ac.noReset(7), '7')
+	eq('ac nxterm keys accepted', ac.noReset('%{bg_red c88 #ff0000}x'), CSI .. '41m' .. CSI .. '38;5;88m' .. CSI .. '38;2;255;0;0mx')
+	local ok, err = pcall(ac, '%{red nope}x')
+	eq('ac unknown key raises', ok, false); eq('ac unknown key message', err, 'Unknown key: nope')
+	ok, err = pcall(ac.noReset, '%{bg red}x')
+	eq('ac unknown part raises', ok, false); eq('ac unknown part message', err, 'Unknown key: bg')
+	errors('ac noReset nil', function() return ac.noReset(nil) end)
+	errors('ac noReset table', function() return ac.noReset({}) end)
+	-- the rest of nxterm stays lenient
+	eq('lenient escape_codes', nxterm.escape_codes('%{nope}x'), (CSI .. '0m') .. CSI .. 'mx' .. (CSI .. '0m'))
+	nxterm.strip = true
+	eq('ac strip', ac('%{red}x'), 'x'); eq('ac noReset strip', ac.noReset('%{red}x'), 'x')
+	nxterm.strip = false
+	-- aliases (kikito + hoelzro names) on the regular API
+	eq('alias hidden', sc'hidden', CSI .. '8m')
+	eq('alias kikito bg', sc'blackbg redbg greenbg yellowbg bluebg magentabg cyanbg whitebg', CSI .. '40;41;42;43;44;45;46;47m')
+	eq('alias hoelzro', sc'clear underscore onblack onred ongreen onyellow onblue onmagenta oncyan onwhite',
+		CSI .. '0;4;40;41;42;43;44;45;46;47m')
+	-- hoelzro/ansicolors call forms
+	eq('hoelzro concat', sc.red .. 'x' .. sc.reset, CSI .. '31mx' .. CSI .. '0m')
+	eq('hoelzro call', sc.red('x'), CSI .. '31mx' .. CSI .. '0m')
+	eq('hoelzro tostring', tostring(sc.onblue), CSI .. '44m')
+end
 
 -- sgr() constructor returns the shared base builder
 eq('sgr()', tostring(nxterm.sgr().blue), CSI .. '34m')
