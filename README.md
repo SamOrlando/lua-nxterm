@@ -1,6 +1,6 @@
 # lua-nxterm
 
-**lua-nxterm** is a feature-rich, pure-Lua drop-in replacement for [ansicolors](https://github.com/kikito/ansicolors.lua) (LuaRocks `ansicolors`): change `require('ansicolors')` to `require('nxterm').ansicolors` and existing `colors('%{red}hello')` / `colors.noReset(...)` calls produce the same bytes. On top of that you get 256-color and truecolor, fluent chaining, cursor and screen control, and modern terminal features (hyperlinks, titles, progress, synchronized output).
+**lua-nxterm** is a feature-rich, pure-Lua drop-in replacement for [ansicolors]. On top of that you get 256-color and truecolor, fluent chaining, cursor and screen control, and modern terminal features (hyperlinks, titles, progress, synchronized output).
 
 ```lua
 local colors = require('nxterm').ansicolors   -- was: require('ansicolors')
