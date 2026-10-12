@@ -53,7 +53,21 @@ No ncurses. No C bindings. Just escape sequences that work on xterm-compatible t
 
 ## Installation
 
-Copy `nxterm.lua` onto your `package.path`, or vendor it next to your script:
+With [LuaRocks](https://luarocks.org/):
+
+```sh
+luarocks install lua-nxterm
+```
+
+From source:
+
+```sh
+git clone https://github.com/SamOrlando/lua-nxterm.git
+cd lua-nxterm
+luarocks make rockspecs/lua-nxterm-0.2.0-1.rockspec
+```
+
+Or vendor the single file `nxterm.lua` next to your script:
 
 ```text
 your-app/
@@ -65,7 +79,11 @@ your-app/
 local nxterm = require('nxterm')
 ```
 
-Pure Lua 5.1+ / LuaJIT. Optional: Unix `stty` for fast terminal size detection.
+Pure Lua 5.1 – 5.4 and LuaJIT, no dependencies. Optional: Unix `stty` for fast terminal size detection and `tty.raw()` / `tty.sane()`.
+
+![example output](docs/images/example.png)
+
+Runnable examples live in [`examples/`](examples/) (`lua examples/basic.lua`, `lua examples/showcase.lua` for an animated truecolor demo). Every public function is documented in [`docs/reference.md`](docs/reference.md).
 
 ---
 
@@ -135,6 +153,8 @@ print(sc.red.bold('hello'))   -- ESC[31;1mhelloESC[0m
 | Greyscale | `g0`…`g23` `bg_g10` `ul_g10` |
 | Truecolor | `r200g100b20` `bg_r100g200b255` `ul_r0g0b0` |
 | Hex | `#BB0066` `#f0c` `bg_#003366` `ul_#ff0` |
+
+Unknown or out-of-range keys (`c256`, `g24`, `#12345`, `r300g0b0`) are ignored rather than raising errors.
 
 ### Style keys
 
@@ -269,7 +289,10 @@ Generic setters:
 ```lua
 nxterm.mode.set(7, true)    -- CSI ?7h
 nxterm.mode.reset(7, true)  -- CSI ?7l
+nxterm.mode.set({1049, 2004}, true)  -- several modes at once: CSI ?1049;2004h
 ```
+
+Legacy helpers: `nxterm.mode.ansi()` (VT52 → ANSI mode, `ESC <`) and `nxterm.mode.gpu(on)` (DEC special-graphics line-drawing charset on/off, `ESC ( 0` / `ESC ( B`).
 
 ---
 
@@ -337,7 +360,7 @@ nxterm
 ├── shift.{left, right}
 ├── char.{insert, delete, erase, rep}
 ├── tab, backtab
-├── mode.{set, reset, alt_screen, bracketed_paste, sync, focus, wrap, size}
+├── mode.{set, reset, alt_screen, bracketed_paste, sync, focus, wrap, ansi, gpu, size}
 ├── mouse.{on, off}
 ├── tty.{sane, raw}
 ├── cursor.{up, down, forward, back, nl, pl, set, setlc, setx, sety,
@@ -426,9 +449,26 @@ Existing `require('ansicolors')` call sites keep working.
 
 ---
 
+## Tests
+
+```sh
+lua tests/test.lua        # any of lua5.1 … lua5.4, luajit
+luarocks test             # via the rockspec
+```
+
+---
+
+## Related projects
+
+- [lua-jsonreq](https://github.com/SamOrlando/lua-jsonreq) — JSON over HTTP(S) and JSON-RPC 2.0 client helpers
+- [lua-hue-v2](https://github.com/SamOrlando/lua-hue-v2) — Philips Hue CLIP API v2 client
+- [lua-nuid](https://github.com/SamOrlando/lua-nuid) — NATS Unique Identifier (NUID) generator in pure Lua
+
+---
+
 ## License
 
-MIT — Copyright (C) Sam Orlando 2024–2026
+MIT — Copyright (c) 2024–2026 Sam Orlando. See [LICENSE](LICENSE).
 
 ---
 

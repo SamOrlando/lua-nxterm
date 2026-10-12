@@ -1,6 +1,6 @@
 #!/usr/bin/env lua
 --[[
-  complex_patterns.lua  —  animated truecolor showcase for lua-nxterm
+  showcase.lua  —  animated truecolor showcase for lua-nxterm
 
   Demonstrates:
     • Scrolling HSV rainbow
@@ -10,7 +10,7 @@
     • Synchronized output for tear-free frames
 
   Requires a truecolor terminal.
-  Run:  lua complex_patterns.lua
+  Run:  lua examples/showcase.lua
   Exit: Ctrl-C  (or let it run ~30 s)
 ]]
 

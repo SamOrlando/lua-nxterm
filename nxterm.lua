@@ -1,3 +1,6 @@
+--- lua-nxterm: terminal escape sequences, cursor control and SGR colours.
+-- https://github.com/SamOrlando/lua-nxterm  (MIT, Copyright (c) 2024-2026 Sam Orlando)
+
 -- local vars
 local read, write, flush = io.read, io.write, io.flush
 local tonumber, tostring = tonumber, tostring
@@ -18,7 +21,7 @@ local bel = char(7)
 local no_color = os.getenv("NO_COLOR") ~= nil
 
 local nxterm = { -- nxterm vtwtf
-	_VERSION     = 'lua-nxterm 0.2',
+	_VERSION     = 'lua-nxterm 0.2.0',
 	_DESCRIPTION = 'NXTerminal Handling, Escape Sequences, Cursor, colors and stuff...',
 	_COPYRIGHT   = 'Copyright (C) Sam Orlando 2024-2026 - MIT',
 	-- options
@@ -60,16 +63,19 @@ local nxterm = { -- nxterm vtwtf
 		-- m = mode number(s), private = true for DEC private modes (the '?')
 		set   = function(m, private)
 			if not m then return end
+			if type(m) == 'table' then m = concat(m, ';') end
 			return concat{esc_csi, private and '?' or '', m, 'h'}
 		end,
 		reset = function(m, private)
 			if not m then return end
+			if type(m) == 'table' then m = concat(m, ';') end
 			return concat{esc_csi, private and '?' or '', m, 'l'}
 		end,
 		-- Note: final 'r' is scroll region (see scroll.region), not mode restore.
 		-- DEC private mode save/restore is not exposed here to avoid that clash.
-		ansi = function() return esc_csi .. '<' end, -- VT100
-		gpu  = function(s) return esc_csi .. (s and '1' or '2') end, -- VT52/100
+		ansi = function() return esc .. '<' end, -- VT52: enter ANSI (VT100) mode (ESC <)
+		-- DEC special graphics (line drawing) charset in G0: on → ESC ( 0, off → ESC ( B (US-ASCII)
+		gpu  = function(on) return esc .. (on and '(0' or '(B') end,
 		alt_screen      = function(on) return on and esc_csi..'?1049h' or esc_csi..'?1049l' end,
 		bracketed_paste = function(on) return on and esc_csi..'?2004h' or esc_csi..'?2004l' end,
 		sync  = function(on) return on and esc_csi..'?2026h' or esc_csi..'?2026l' end,
@@ -136,14 +142,15 @@ nxterm.cursor = { -- CURSOR Sequences and Functions
 		local r, m = '', 0
 		while true do
 			c = read(1)
-			m = m + 1
+			if not c then return end -- EOF / not a terminal
 			if c == 'R' then break end
-			if m > 12 then return end -- safety
+			m = m + 1
+			if m > 16 then return end -- safety
 			r = r .. c
 		end
 		local row, col = match(r, '(%d+);(%d+)')
 		if not row then return end
-		-- return {x=col, y=row} for compatibility with original
+		-- returns {col, row} (x, y)
 		return {tonumber(col), tonumber(row)}
 	end,
 	getlc = function()
@@ -174,7 +181,7 @@ function nxterm.size()
 	if not pos then return end
 	write(cursor.set(9999, 9999)); flush()
 	local size = cursor.get()
-	if pos then write(cursor.set(pos[1], pos[2])); flush() end
+	write(cursor.set(pos[1], pos[2])); flush()
 	return size
 end
 nxterm.mode.size = nxterm.size -- keep old name working
@@ -237,7 +244,7 @@ local key_to_sgr = {
 
 -- 256-color palette helpers
 local function cc_get(s)
-	local cc = tonumber(match(s, 'c(%d+)'))
+	local cc = tonumber(match(s, 'c(%d+)$'))
 	if not cc or cc < 0 or cc > 255 then return end
 	return cc
 end
@@ -251,12 +258,12 @@ key_to_sgr.bg_c = function(s)
 end
 key_to_sgr.ul_c = function(s)
 	local cc = cc_get(s)
-	return cc and ('58;5:' .. cc) -- colon form preferred for underline colour
+	return cc and ('58;5;' .. cc)
 end
 
 -- greyscale (g0 .. g23 → 232 .. 255)
 local function gc_get(s)
-	local i = tonumber(match(s, 'g(%d+)'))
+	local i = tonumber(match(s, 'g(%d+)$'))
 	if not i or i < 0 or i > 23 then return end
 	return 232 + i
 end
@@ -270,12 +277,12 @@ key_to_sgr.bg_g = function(s)
 end
 key_to_sgr.ul_g = function(s)
 	local cc = gc_get(s)
-	return cc and ('58;5:' .. cc)
+	return cc and ('58;5;' .. cc)
 end
 
 -- truecolor r100g50b0
 local function extract_rgb(s)
-	local r, g, b = match(s, 'r(%d+)g(%d+)b(%d+)')
+	local r, g, b = match(s, 'r(%d+)g(%d+)b(%d+)$')
 	r, g, b = tonumber(r), tonumber(g), tonumber(b)
 	if not (r and g and b) then return end
 	if r < 0 or r > 255 or g < 0 or g > 255 or b < 0 or b > 255 then return end
@@ -291,18 +298,18 @@ key_to_sgr.bg_r = function(s)
 end
 key_to_sgr.ul_r = function(s)
 	local r, g, b = extract_rgb(s)
-	return r and format('58;2:%d:%d:%d', r, g, b)
+	return r and format('58;2;%d;%d;%d', r, g, b)
 end
 
 -- hex #rrggbb or short #rgb
 local function hex_to_rgb(hex)
 	local r, g, b
-	r, g, b = match(hex, '#(%x%x)(%x%x)(%x%x)')
+	r, g, b = match(hex, '#(%x%x)(%x%x)(%x%x)$')
 	if r then
 		r, g, b = tonumber(r, 16), tonumber(g, 16), tonumber(b, 16)
 	else
 		-- short form #rgb → #rrggbb
-		r, g, b = match(hex, '#(%x)(%x)(%x)')
+		r, g, b = match(hex, '#(%x)(%x)(%x)$')
 		if not r then return end
 		r = tonumber(r .. r, 16)
 		g = tonumber(g .. g, 16)
@@ -321,47 +328,45 @@ key_to_sgr['bg_#'] = function(s)
 end
 key_to_sgr['ul_#'] = function(s)
 	local r, g, b = hex_to_rgb(s)
-	return r and format('58;2:%d:%d:%d', r, g, b)
+	return r and format('58;2;%d;%d;%d', r, g, b)
 end
 
 -- Resolve key tokens to a list of SGR parameter fragments (no CSI wrapper).
 -- e.g. "red bold" → {"31","1"}   "c88" → {"38;5;88"}   "" → {}
+-- Unknown or out-of-range tokens are ignored. Results are memoised per key string.
+local prefixes = { [''] = true, bg_ = true, ul_ = true }
+local function resolve_token(v)
+	local sn = key_to_sgr[v]
+	if sn ~= nil and type(sn) ~= 'function' then return sn end
+	-- dynamic forms: [bg_|ul_](cN | gN | #hex | rNgNbN)
+	local pre, body = match(v, '^(%a%a_)(.+)$')
+	if not (pre and prefixes[pre]) then pre, body = '', v end
+	local kind
+	if match(body, '^#%x+$') then kind = '#'
+	elseif match(body, '^c%d+$') then kind = 'c'
+	elseif match(body, '^g%d+$') then kind = 'g'
+	elseif match(body, '^r%d+g%d+b%d+$') then kind = 'r'
+	end
+	local fn = kind and key_to_sgr[pre .. kind]
+	return fn and fn(body) or nil
+end
+
+local params_cache = setmetatable({}, { __mode = 'k' })
 local function keys_to_sgr_params(keys)
 	if keys == true then keys = '' end -- historical: true → reset
-	local tbl = {}
-	for v in gmatch(keys or '', '[%w#_]+') do
-		local sn = key_to_sgr[v]
-		if sn then
-			insert(tbl, sn)
-		else
-			local fc = sub(v, 1, 1)
-			if find(v, '[cg]%d+$') then
-				if fc == 'c' or fc == 'g' then
-					sn = key_to_sgr[fc](v)
-				else
-					-- bg_c69, ul_g12, etc.
-					sn = key_to_sgr[sub(v, 1, 4)] and key_to_sgr[sub(v, 1, 4)](v)
-				end
-			elseif find(v, '#%x+$') then
-				if fc == '#' then
-					sn = key_to_sgr['#'](v)
-				else
-					sn = key_to_sgr[sub(v, 1, 4)] and key_to_sgr[sub(v, 1, 4)](v)
-				end
-			elseif find(v, 'r%d+g%d+b%d+$') then
-				if fc == 'r' then
-					sn = key_to_sgr.r(v)
-				else
-					sn = key_to_sgr[sub(v, 1, 4)] and key_to_sgr[sub(v, 1, 4)](v)
-				end
-			end
-			if sn then insert(tbl, sn) end
-		end
+	keys = keys or ''
+	local tbl = params_cache[keys]
+	if tbl then return tbl end
+	tbl = {}
+	for v in gmatch(keys, '[%w#_]+') do
+		local sn = resolve_token(v)
+		if sn then tbl[#tbl + 1] = tostring(sn) end
 	end
+	if type(keys) == 'string' then params_cache[keys] = tbl end
 	return tbl
 end
 
--- Convert a space/underscore separated list of keys into a single SGR sequence.
+-- Convert a whitespace (or any non [%w#_]) separated list of keys into a single SGR sequence.
 -- Empty key list still emits ESC[m (equivalent to reset / SGR 0).
 local function keys_to_sgr(keys)
 	if nxterm.strip then return '' end
@@ -414,25 +419,22 @@ end
 --   color("red bold") / color'red bold ul'  → classic key form (returns sequence)
 --   color("red bold", "text", true)  → classic wrap form
 ---------------------------------------------------------------------------
+local sgr_objects = {} -- params string → shared immutable builder object
+local make_sgr
+
 local function make_sgr_mt(params)
 	-- params = semicolon-joined SGR parameter string, e.g. "31;1;4"
-	params = params or ''
 	local function emit()
 		if nxterm.strip then return '' end
 		return concat{esc_csi, params, 'm'}
 	end
-	local mt
-	mt = {
+	return {
 		__index = function(_, key)
+			if type(key) ~= 'string' then return nil end
 			local add = keys_to_sgr_params(key)
-			if #add == 0 then
-				return setmetatable({}, make_sgr_mt(params))
-			end
-			local combined = params
-			for i = 1, #add do
-				combined = combined == '' and tostring(add[i]) or (combined .. ';' .. add[i])
-			end
-			return setmetatable({}, make_sgr_mt(combined))
+			if #add == 0 then return make_sgr(params) end
+			local joined = concat(add, ';')
+			return make_sgr(params == '' and joined or (params .. ';' .. joined))
 		end,
 		__call = function(_, a, b, c)
 			if params == '' then
@@ -441,26 +443,33 @@ local function make_sgr_mt(params)
 				--   sc("red bold", "text")  → sequence + text
 				--   sc("red bold", "text", "reset") → full wrap
 				return compile_sgr(a, b, c)
-			else
-				-- Fluent chain already has styles accumulated
-				--   sc.red.bold("text")     → styles + text + reset
-				--   sc.red.bold()           → just the accumulated sequence
-				if a == nil then
-					return emit()
-				end
-				return emit() .. tostring(a) .. keys_to_sgr('reset')
 			end
+			-- Fluent chain already has styles accumulated
+			--   sc.red.bold("text")     → styles + text + reset
+			--   sc.red.bold()           → just the accumulated sequence
+			if a == nil then return emit() end
+			return emit() .. tostring(a) .. keys_to_sgr('reset')
 		end,
 		__tostring = emit,
 		__concat = function(a, b)
 			return tostring(a) .. tostring(b)
 		end,
+		__newindex = function() error('nxterm: colour builder objects are read-only', 2) end,
 	}
-	return mt
+end
+
+make_sgr = function(params)
+	params = params or ''
+	local o = sgr_objects[params]
+	if not o then
+		o = setmetatable({}, make_sgr_mt(params))
+		sgr_objects[params] = o
+	end
+	return o
 end
 
 function nxterm.sgr()
-	return setmetatable({}, make_sgr_mt(''))
+	return make_sgr('')
 end
 
 nxterm.color  = nxterm.sgr()
@@ -472,7 +481,9 @@ function nxterm.format(fstr, ...)
 	local t = {}
 	for i = 1, n do
 		local v = select(i, ...)
-		t[i] = (type(v) == 'string') and codes_to_escape(v) or v
+		-- expand %{} markers in string arguments without the reset brackets,
+		-- so an argument does not cancel the style set by the format string
+		t[i] = (type(v) == 'string') and (gsub(v, '%%{(.-)}', keys_to_sgr)) or v
 	end
 	return format(fstr, unpack(t))
 end
