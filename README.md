@@ -1,6 +1,6 @@
 # lua-nxterm
 
-**NXTerminal** — pure-Lua ANSI / VT escape sequences, colors, cursor control, and modern terminal features.
+**lua-nxterm** is a feature-rich, pure-Lua alternative to [ansicolors](https://github.com/kikito/ansicolors.lua) (LuaRocks `ansicolors`): it speaks the same ansicolors-compatible `%{...}` markup — `nxterm.escape_codes('%{red}hello')` renders the same as `colors('%{red}hello')` — and adds 256-color and truecolor, fluent chaining, cursor and screen control, and modern terminal features (hyperlinks, titles, progress, synchronized output). See [Migrating from ansicolors](#migrating-from-ansicolors) for the few key-name differences.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Lua](https://img.shields.io/badge/Lua-5.1%2B-blue.svg)](https://www.lua.org/)
@@ -26,7 +26,7 @@ print(nxterm.escape_codes('Status: %{green bold}OK%{}'))
 - **Modern OSC/CSI extras** (hyperlinks, window title, cwd, progress, synchronized output, focus, mouse)
 - **Ergonomic APIs** — fluent chaining, classic key strings, and `%{...}` embedding in format strings
 
-It is designed to be **easy to drop into existing projects**, including as a replacement for simpler color-only libraries such as [ansicolors](https://github.com/hoelzro/ansicolors).
+It is designed to be **easy to drop into existing projects**, including as a replacement for simpler color-only libraries such as ansicolors (see below).
 
 No ncurses. No C bindings. Just escape sequences that work on xterm-compatible terminals (Linux console, macOS Terminal, iTerm2, Windows Terminal, Kitty, Ghostty, WezTerm, Alacritty, tmux, …).
 
@@ -182,48 +182,56 @@ nxterm.printf('Task %{cyan}%s%{} → %{green bold}%s', 'build', 'done')
 
 ---
 
-## Drop-in replacement for **ansicolors**
+## Migrating from ansicolors
 
-[ansicolors](https://github.com/hoelzro/ansicolors) popularized a simple API:
+Two Lua libraries go by this name; nxterm covers the common usage of both.
+
+### kikito/ansicolors.lua (LuaRocks `ansicolors`)
+
+[ansicolors.lua](https://github.com/kikito/ansicolors.lua) is a callable module that expands `%{...}` markup:
+
+| ansicolors | nxterm | Notes |
+|------------|--------|-------|
+| `colors('%{red}hello')` | `nxterm.escape_codes('%{red}hello')` | same rendering (reset before and after); nxterm merges keys into one sequence (`ESC[1;31m` instead of `ESC[1mESC[31m`) |
+| `colors.noReset('%{red}hello')` | the shim below | no built-in equivalent |
+| keys `red` … `white`, `bright`, `dim`, `underline`, `blink`, `reverse`, `reset` | same names | |
+| `hidden` | `hide` | |
+| `redbg`, `bluebg`, … | `bg_red`, `bg_blue`, … | |
+| unknown key → error | unknown key → ignored | |
+
+Note that `nxterm.color('%{red}x')` is **not** the same call: `nxterm.color(keys)` takes a key list (`'red bold'`) and returns only the escape sequence.
+
+A small shim keeps existing `require('ansicolors')` call sites working (the `hidden` and `*bg` key names still need renaming):
 
 ```lua
-local ansicolors = require('ansicolors')
-print(ansicolors.red .. 'hello' .. ansicolors.reset)
-print(ansicolors.red('hello'))
+-- ansicolors.lua  (shim on top of nxterm)
+local nx = require('nxterm')
+local function expand(s)
+  return (tostring(s or ''):gsub('%%{(.-)}', function(k) return nx.color(k) end))
+end
+return setmetatable({ noReset = expand }, {
+  __call = function(_, s) return nx.escape_codes(tostring(s == nil and '' or s)) end,
+})
 ```
 
-`nxterm.color` supports the same patterns, plus chaining and many more attributes.
+### hoelzro/ansicolors (superseded by lua-term)
 
-### Direct migration
+[hoelzro/ansicolors](https://github.com/hoelzro/ansicolors) uses property access. `nxterm.color` supports the same forms:
 
 ```lua
--- Before
-local colors = require('ansicolors')
-
--- After (drop-in style)
-local colors = require('nxterm').color
--- or: local colors = require('nxterm').colour
+local colors = require('nxterm').color         -- was: require('ansicolors')
 
 print(colors.red .. 'hello' .. colors.reset)
 print(colors.red('hello'))                    -- auto-reset after text
-print(colors.red .. colors.bold .. 'hello' .. colors.reset)
+print(colors.red, 'hello', colors.reset)
 
--- nxterm extras (not in classic ansicolors)
+-- nxterm extras
 print(colors.red.bold.ul('hello'))            -- single combined sequence
 print(colors('red bold underline') .. 'hi')
 print(colors['bg_blue white bold'] .. 'banner' .. colors.reset)
 ```
 
-### Side-by-side
-
-| ansicolors | nxterm |
-|------------|--------|
-| `colors.red .. 'x' .. colors.reset` | same |
-| `colors.red('x')` | same (resets after text) |
-| `colors.red .. colors.bold .. 'x'` | works; prefer `colors.red.bold` for one sequence |
-| — | `colors('red bold')`, `%{red bold}`, truecolor, 256-color, cursor, OSC helpers |
-
-No other code changes are required for typical ansicolors usage.
+Key names that differ: `clear` → `reset`, `underscore` → `ul` / `underline`, `hidden` → `hide`, `onred` … → `bg_red` …. `colors.red .. colors.bold` works, but `colors.red.bold` emits one sequence.
 
 ---
 
@@ -420,14 +428,7 @@ io.write(nxterm.mode.alt_screen(false))
 
 ### ansicolors-compatible module shim
 
-If you want a file literally named like the old dependency:
-
-```lua
--- ansicolors.lua  (shim)
-return require('nxterm').color
-```
-
-Existing `require('ansicolors')` call sites keep working.
+See [Migrating from ansicolors](#migrating-from-ansicolors) for a shim that keeps `require('ansicolors')` call sites (kikito's `%{...}` API) working.
 
 ---
 
@@ -469,4 +470,4 @@ MIT — Copyright (c) 2024–2026 Sam Orlando. See [LICENSE](LICENSE).
 - [ANSI escape code](https://en.wikipedia.org/wiki/ANSI_escape_code)
 - [XTerm control sequences](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html)
 - [NO_COLOR](https://no-color.org/)
-- [ansicolors](https://github.com/hoelzro/ansicolors) (API inspiration for the simple color surface)
+- [ansicolors.lua](https://github.com/kikito/ansicolors.lua) and [hoelzro/ansicolors](https://github.com/hoelzro/ansicolors) (API inspiration for the `%{...}` markup and the simple color surface)
