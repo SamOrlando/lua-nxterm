@@ -10,7 +10,7 @@ Notation: `CSI` = `ESC [`, `OSC` = `ESC ]`, `BEL` = `\7`.
 
 | Field | Description |
 |-------|-------------|
-| `nxterm._VERSION` | `'lua-nxterm 0.3.0'` |
+| `nxterm._VERSION` | `'lua-nxterm 0.3.1'` |
 | `nxterm.strip` | `true` when `NO_COLOR` is set at load time. When `true`, all SGR output (colour/style) becomes `''` and `link()` returns plain text. May be changed at runtime. |
 
 ## Colours and styles (SGR)
@@ -39,27 +39,24 @@ dynamic `cN` (0–255), `gN` (greyscale 0–23), `rNgNbN` (0–255 each), `#rrgg
 Aliases from ansicolors: `hidden` (8), `blackbg` … `whitebg` (40–47), `clear` (0),
 `underscore` (4), `onblack` … `onwhite` (40–47).
 
-### `nxterm.ansicolors`
+### `nxterm(...)` — ansicolors drop-in
 
-Drop-in replacement for [kikito/ansicolors.lua](https://github.com/kikito/ansicolors.lua)
-1.0.2 (`local colors = require('nxterm').ansicolors`). Output is byte-identical to ansicolors.
+The module table is callable: `nxterm(...)` is `nxterm.escape_codes(...)`. With
+`nxterm.noReset` this makes `local colors = require('nxterm')` a drop-in
+replacement for [kikito/ansicolors.lua](https://github.com/kikito/ansicolors.lua) 1.0.2
+(`colors('%{red}x')`, `colors.noReset('%{red}x')`). Output renders the same as
+ansicolors; bytes differ only where nxterm merges several keys into one sequence
+or expands `%{}` to `ESC[m`. Unknown keys are ignored (ansicolors raises).
 
-| Usage | Returns |
-|-------|---------|
-| `ansicolors(str)` | `str` (converted with `tostring`; `nil`/`false` → `''`) wrapped in `%{reset}` … `%{reset}` with markup expanded |
-| `ansicolors.noReset(str)` | `str` (string or number) with markup expanded, no resets; other types raise an error |
-
-Markup `%{keys}`: each key becomes its own `CSI n m`. Keys are split on any
-non-alphanumeric character unless the whole token is an nxterm key (`bg_red`,
-`c88`, `#ff8800`, …), so `%{bright_red}` = `bright` + `red`. An unknown key raises
-`Unknown key: <word>` (only here; the rest of nxterm ignores unknown keys).
-`%{}` expands to nothing. Respects `nxterm.strip`.
+### `nxterm.noReset(str)`
+`str` (string or number) with `%{keys}` markup expanded, without the resets
+`escape_codes` adds. Other types raise an error. Respects `nxterm.strip`.
 
 ### `nxterm.sgr()`
 Returns the base builder (same object as `nxterm.color`).
 
 ### `nxterm.escape_codes(...)`
-Concatenates its string arguments (non-strings are skipped), replacing each `%{keys}` marker with the SGR
+Concatenates its arguments (non-strings converted with `tostring`; `nil` and `false` become `''`), replacing each `%{keys}` marker with the SGR
 sequence for `keys` (`%{}` = reset). The result is wrapped in `CSI 0m` … `CSI 0m`.
 
 ```lua

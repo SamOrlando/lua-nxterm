@@ -21,7 +21,7 @@ local bel = char(7)
 local no_color = os.getenv("NO_COLOR") ~= nil
 
 local nxterm = { -- nxterm vtwtf
-	_VERSION     = 'lua-nxterm 0.3.0',
+	_VERSION     = 'lua-nxterm 0.3.1',
 	_DESCRIPTION = 'NXTerminal Handling, Escape Sequences, Cursor, colors and stuff...',
 	_COPYRIGHT   = 'Copyright (C) Sam Orlando 2024-2026 - MIT',
 	-- options
@@ -369,7 +369,17 @@ local function keys_to_sgr_params(keys)
 	tbl = {}
 	for v in gmatch(keys, '[%w#_]+') do
 		local sn = resolve_token(v)
-		if sn then tbl[#tbl + 1] = tostring(sn) end
+		if sn then tbl[#tbl + 1] = tostring(sn)
+		elseif find(v, '_', 1, true) then
+			-- ansicolors style: bright_red = bright + red, only when every part is a key
+			local parts = {}
+			for part in gmatch(v, '%w+') do
+				local p = resolve_token(part)
+				if p == nil then parts = nil break end
+				parts[#parts + 1] = tostring(p)
+			end
+			if parts then for j = 1, #parts do tbl[#tbl + 1] = parts[j] end end
+		end
 	end
 	if type(keys) == 'string' then params_cache[keys] = tbl end
 	return tbl
@@ -383,19 +393,28 @@ local function keys_to_sgr(keys)
 	return concat{esc_csi, concat(tbl, ';'), 'm'}
 end
 
+-- Expand %{keys} markup without adding resets (strings and numbers).
+local function expand_codes(s)
+	return (gsub(s, '%%{(.-)}', keys_to_sgr))
+end
+
+-- Expand markup and wrap the result in resets. Arguments are converted with
+-- tostring (nil / false → ''), like ansicolors.
 function nxterm.escape_codes(...)
 	local n = select('#', ...)
 	local tbl = {keys_to_sgr('reset')}
 	for i = 1, n do
 		local v = select(i, ...)
-		if type(v) == 'string' then
-			insert(tbl, (gsub(v, '%%{(.-)}', keys_to_sgr)))
+		if v ~= nil and v ~= false then
+			insert(tbl, expand_codes(tostring(v)))
 		end
 	end
 	insert(tbl, keys_to_sgr('reset'))
 	return concat(tbl)
 end
 local codes_to_escape = nxterm.escape_codes
+-- ansicolors drop-in: colors.noReset(str)
+nxterm.noReset = expand_codes
 
 function nxterm.escape_strip(...)
 	local n = select('#', ...)
@@ -484,49 +503,6 @@ end
 nxterm.color  = nxterm.sgr()
 nxterm.colour = nxterm.color
 
----------------------------------------------------------------------------
--- ansicolors drop-in (kikito/ansicolors.lua, LuaRocks "ansicolors" 1.0.2)
---   local colors = require('nxterm').ansicolors
---   colors('%{red}hello')          → ESC[0m ESC[31m hello ESC[0m
---   colors.noReset('%{red}hello')  → ESC[31m hello
--- Byte-for-byte compatible with ansicolors: one ESC[<n>m per key, strict
--- (unknown keys raise "Unknown key: <word>"). nxterm keys (bg_red, c88,
--- #ff8800, r1g2b3, ...) are accepted too. Honours nxterm.strip / NO_COLOR.
----------------------------------------------------------------------------
-local function ac_escape_keys(keys)
-	if nxterm.strip then return '' end
-	local buf = {}
-	for word in gmatch(keys, '[%w#_]+') do
-		local sn = resolve_token(word)
-		if sn ~= nil then
-			buf[#buf + 1] = concat{esc_csi, sn, 'm'}
-		else
-			-- ansicolors splits on non-alphanumerics: bright_red = bright + red
-			for part in gmatch(word, '%w+') do
-				local p = resolve_token(part)
-				if p == nil then error('Unknown key: ' .. part, 0) end
-				buf[#buf + 1] = concat{esc_csi, p, 'm'}
-			end
-		end
-	end
-	return concat(buf)
-end
-
-local function ac_replace_codes(str)
-	local t = type(str)
-	if t ~= 'string' and t ~= 'number' then
-		error("bad argument #1 to 'noReset' (string expected, got " .. (t == 'nil' and 'no value' or t) .. ")", 2)
-	end
-	return (gsub(str, '%%{(.-)}', ac_escape_keys))
-end
-
-nxterm.ansicolors = setmetatable({ noReset = ac_replace_codes }, {
-	__call = function(_, str)
-		str = tostring(str or '')
-		return ac_replace_codes('%{reset}' .. str .. '%{reset}')
-	end,
-})
-
 function nxterm.format(fstr, ...)
 	fstr = codes_to_escape(fstr)
 	local n = select('#', ...)
@@ -535,7 +511,7 @@ function nxterm.format(fstr, ...)
 		local v = select(i, ...)
 		-- expand %{} markers in string arguments without the reset brackets,
 		-- so an argument does not cancel the style set by the format string
-		t[i] = (type(v) == 'string') and (gsub(v, '%%{(.-)}', keys_to_sgr)) or v
+		t[i] = (type(v) == 'string') and expand_codes(v) or v
 	end
 	return format(fstr, unpack(t))
 end
@@ -552,5 +528,11 @@ function nxterm.print(...)
 	write(codes_to_escape(...) .. '\r\n')
 	flush()
 end
+
+-- The module itself is an ansicolors drop-in:
+--   local colors = require('nxterm')
+--   colors('%{red}hello')         → nxterm.escape_codes('%{red}hello')
+--   colors.noReset('%{red}hello') → markup only, no resets
+setmetatable(nxterm, { __call = function(_, ...) return codes_to_escape(...) end })
 
 return nxterm

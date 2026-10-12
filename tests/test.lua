@@ -23,7 +23,7 @@ end
 local sc = nxterm.color
 
 -- metadata
-eq('version', nxterm._VERSION, 'lua-nxterm 0.3.0')
+eq('version', nxterm._VERSION, 'lua-nxterm 0.3.1')
 eq('colour alias', nxterm.colour, sc)
 eq('clear alias', nxterm.clear, nxterm.erase)
 
@@ -84,7 +84,7 @@ nxterm.strip = false
 -- embedding / formatting
 local R = CSI .. '0m'
 eq('escape_codes', nxterm.escape_codes('a%{red}b%{}c'), R .. 'a' .. CSI .. '31mb' .. CSI .. 'mc' .. R)
-eq('escape_codes multi', nxterm.escape_codes('a', 1, 'b'), R .. 'ab' .. R)
+eq('escape_codes multi (non-strings via tostring)', nxterm.escape_codes('a', 1, 'b'), R .. 'a1b' .. R)
 eq('escape_strip', nxterm.escape_strip('a%{red bold}b%{}c', 'd'), 'abcd')
 eq('format', nxterm.format('%{green}%s=%d', 'n', 3), R .. CSI .. '32mn=3' .. R)
 eq('format arg markers', nxterm.format('%s', '%{red}x'), R .. CSI .. '31mx' .. R)
@@ -145,46 +145,51 @@ eq('progress hide', nxterm.progress(0), OSC .. '9;4;0' .. BEL)
 eq('bell', nxterm.bell(), BEL)
 
 
--- ansicolors compatibility (expected bytes taken from kikito/ansicolors.lua 1.0.2)
+-- ansicolors compatibility: the module itself is callable (expected output
+-- matches kikito/ansicolors.lua 1.0.2 byte for byte, or renders the same)
 do
-	local ac = nxterm.ansicolors
-	eq('ac call', ac('%{red}hello'), CSI .. '0m' .. CSI .. '31mhello' .. CSI .. '0m')
-	eq('ac one seq per key', ac('%{bright red}x'), CSI .. '0m' .. CSI .. '1m' .. CSI .. '31mx' .. CSI .. '0m')
-	eq('ac underscore split', ac('%{bright_red}x'), CSI .. '0m' .. CSI .. '1m' .. CSI .. '31mx' .. CSI .. '0m')
-	eq('ac comma list', ac('%{red,bright}x'), CSI .. '0m' .. CSI .. '31m' .. CSI .. '1mx' .. CSI .. '0m')
-	eq('ac empty braces', ac('%{}x'), CSI .. '0mx' .. CSI .. '0m')
-	eq('ac plain', ac('plain'), CSI .. '0mplain' .. CSI .. '0m')
-	eq('ac nil', ac(nil), CSI .. '0m' .. CSI .. '0m')
-	eq('ac number', ac(42), CSI .. '0m42' .. CSI .. '0m')
-	eq('ac boolean', ac(true), CSI .. '0mtrue' .. CSI .. '0m')
-	eq('ac tostring obj', ac(setmetatable({}, { __tostring = function() return '%{blue}o' end })),
-		CSI .. '0m' .. CSI .. '34mo' .. CSI .. '0m')
-	eq('ac hidden + bg', ac('%{hidden redbg whitebg}x'), CSI .. '0m' .. CSI .. '8m' .. CSI .. '41m' .. CSI .. '47mx' .. CSI .. '0m')
-	eq('ac noReset', ac.noReset('%{red}hello'), CSI .. '31mhello')
-	eq('ac noReset plain', ac.noReset('plain'), 'plain')
-	eq('ac noReset empty braces', ac.noReset('%{}'), '')
-	eq('ac noReset number', ac.noReset(7), '7')
-	eq('ac nxterm keys accepted', ac.noReset('%{bg_red c88 #ff0000}x'), CSI .. '41m' .. CSI .. '38;5;88m' .. CSI .. '38;2;255;0;0mx')
-	local ok, err = pcall(ac, '%{red nope}x')
-	eq('ac unknown key raises', ok, false); eq('ac unknown key message', err, 'Unknown key: nope')
-	ok, err = pcall(ac.noReset, '%{bg red}x')
-	eq('ac unknown part raises', ok, false); eq('ac unknown part message', err, 'Unknown key: bg')
-	errors('ac noReset nil', function() return ac.noReset(nil) end)
-	errors('ac noReset table', function() return ac.noReset({}) end)
-	-- the rest of nxterm stays lenient
-	eq('lenient escape_codes', nxterm.escape_codes('%{nope}x'), (CSI .. '0m') .. CSI .. 'mx' .. (CSI .. '0m'))
+	local colors = nxterm
+	local R0 = CSI .. '0m'
+	eq('module call', colors('%{red}hello'), R0 .. CSI .. '31mhello' .. R0)
+	eq('module call = escape_codes', colors('%{bold}x'), nxterm.escape_codes('%{bold}x'))
+	eq('module call multi-key (merged)', colors('%{bright red}x'), R0 .. CSI .. '1;31mx' .. R0)
+	eq('underscore split', colors('%{bright_red}x'), R0 .. CSI .. '1;31mx' .. R0)
+	eq('comma list', colors('%{red,bright}x'), R0 .. CSI .. '31;1mx' .. R0)
+	eq('plain', colors('plain'), R0 .. 'plain' .. R0)
+	eq('nil', colors(nil), R0 .. R0)
+	eq('no args', colors(), R0 .. R0)
+	eq('false', colors(false), R0 .. R0)
+	eq('number', colors(42), R0 .. '42' .. R0)
+	eq('boolean true', colors(true), R0 .. 'true' .. R0)
+	eq('tostring obj', colors(setmetatable({}, { __tostring = function() return '%{blue}o' end })), R0 .. CSI .. '34mo' .. R0)
+	eq('hidden + kikito bg', colors('%{hidden redbg whitebg}x'), R0 .. CSI .. '8;41;47mx' .. R0)
+	eq('unknown key ignored (documented difference)', colors('%{red nope}x'), R0 .. CSI .. '31mx' .. R0)
+	eq('escape_codes multi args', nxterm.escape_codes('a', 1, nil, 'b'), R0 .. 'a1b' .. R0)
+	eq('noReset', colors.noReset('%{red}hello'), CSI .. '31mhello')
+	eq('noReset plain', colors.noReset('plain'), 'plain')
+	eq('noReset number', colors.noReset(7), '7')
+	eq('noReset nxterm keys', colors.noReset('%{bg_red c88 #ff0000}x'), CSI .. '41;38;5;88;38;2;255;0;0mx')
+	errors('noReset nil', function() return colors.noReset(nil) end)
+	errors('noReset table', function() return colors.noReset({}) end)
 	nxterm.strip = true
-	eq('ac strip', ac('%{red}x'), 'x'); eq('ac noReset strip', ac.noReset('%{red}x'), 'x')
+	eq('module call strip', colors('%{red}x'), 'x'); eq('noReset strip', colors.noReset('%{red}x'), 'x')
 	nxterm.strip = false
+	-- __call on the module must not disturb the rest of the API
+	eq('module metatable only __call', type(getmetatable(nxterm).__call), 'function')
+	eq('module index unaffected', nxterm.nope, nil)
+	eq('color chaining intact', tostring(nxterm.color.red.bold), CSI .. '31;1m')
+	eq('cursor intact', nxterm.cursor.up(2), CSI .. '2A')
+	eq('no ansicolors table', nxterm.ansicolors, nil)
 	-- aliases (kikito + hoelzro names) on the regular API
 	eq('alias hidden', sc'hidden', CSI .. '8m')
 	eq('alias kikito bg', sc'blackbg redbg greenbg yellowbg bluebg magentabg cyanbg whitebg', CSI .. '40;41;42;43;44;45;46;47m')
 	eq('alias hoelzro', sc'clear underscore onblack onred ongreen onyellow onblue onmagenta oncyan onwhite',
 		CSI .. '0;4;40;41;42;43;44;45;46;47m')
-	-- hoelzro/ansicolors call forms
 	eq('hoelzro concat', sc.red .. 'x' .. sc.reset, CSI .. '31mx' .. CSI .. '0m')
 	eq('hoelzro call', sc.red('x'), CSI .. '31mx' .. CSI .. '0m')
 	eq('hoelzro tostring', tostring(sc.onblue), CSI .. '44m')
+	eq('fluent underscore split', tostring(sc.bright_red), CSI .. '1;31m')
+	eq('underscore split needs all parts valid', sc'ul_r bright_nope', CSI .. 'm')
 end
 
 -- sgr() constructor returns the shared base builder
